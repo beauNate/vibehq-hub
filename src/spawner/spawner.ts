@@ -53,6 +53,7 @@ export class AgentSpawner {
     private readonly PTY_IDLE_TIMEOUT = 10000; // 10s of PTY silence = idle
     private useJsonlDetection = false; // true for Claude/Codex (JSONL-based idle detection)
     private pendingMessages: Array<{ type: string; msg: any }> = [];
+    private endTurnDebounce: ReturnType<typeof setTimeout> | null = null;
 
     constructor(options: SpawnerOptions) {
         this.options = options;
@@ -315,11 +316,10 @@ export class AgentSpawner {
         // PTY output → user stdout (direct passthrough, no parsing)
         this.ptyProcess.onData((data: string) => {
             process.stdout.write(data);
-            // Reset PTY idle timer only for PTY-based detection (Gemini)
-            // Claude and Codex use JSONL-based detection — PTY resets would override JSONL signals
-            if (!this.useJsonlDetection) {
-                this.resetPtyIdleTimer();
-            }
+            // Layer 3: PTY silence fallback for ALL CLIs
+            // JSONL CLIs use longer timeout (30s) and don't auto-set 'working'
+            // PTY-only CLIs use shorter timeout (10s) and do auto-set 'working'
+            this.resetPtyIdleTimer();
         });
 
         this.ptyProcess.onExit(({ exitCode }) => {
@@ -560,10 +560,30 @@ export class AgentSpawner {
                         // type:'system' with subtype:'turn_duration' = entire turn complete -> idle
                         //   (fires ONCE after all tool calls are done, unlike stop_reason:'end_turn'
                         //    which can fire multiple times during a single turn with tool use)
+                        // Layer 1: turn_duration — most reliable, fires once per turn
                         if (msg.type === 'user' && msg.userType === 'external') {
                             this.sendStatus('working');
+                            // Cancel any pending end_turn debounce
+                            if (this.endTurnDebounce) {
+                                clearTimeout(this.endTurnDebounce);
+                                this.endTurnDebounce = null;
+                            }
                         } else if (msg.type === 'system' && msg.subtype === 'turn_duration') {
+                            // Cancel debounce — turn_duration is authoritative
+                            if (this.endTurnDebounce) {
+                                clearTimeout(this.endTurnDebounce);
+                                this.endTurnDebounce = null;
+                            }
                             this.sendStatus('idle');
+                        } else if (msg.type === 'assistant' && msg.message?.stop_reason === 'end_turn') {
+                            // Layer 2: end_turn with debounce (3s) — fallback when turn_duration is missing
+                            if (this.endTurnDebounce) clearTimeout(this.endTurnDebounce);
+                            this.endTurnDebounce = setTimeout(() => {
+                                this.endTurnDebounce = null;
+                                if (this.currentStatus === 'working') {
+                                    this.sendStatus('idle');
+                                }
+                            }, 3000);
                         }
                     } catch {
                         // skip malformed lines
@@ -736,14 +756,16 @@ export class AgentSpawner {
 
     private resetPtyIdleTimer(): void {
         if (this.ptyIdleTimer) clearTimeout(this.ptyIdleTimer);
-        // Any PTY output means the CLI is working
-        if (this.currentStatus === 'idle') {
+        // For PTY-only CLIs: any output means working
+        // For JSONL CLIs: don't override JSONL-based status, just reset the fallback timer
+        if (!this.useJsonlDetection && this.currentStatus === 'idle') {
             this.sendStatus('working');
         }
-        // Start countdown to idle
+        // Start countdown to idle — longer for JSONL CLIs (fallback only)
+        const timeout = this.useJsonlDetection ? 30000 : this.PTY_IDLE_TIMEOUT;
         this.ptyIdleTimer = setTimeout(() => {
             this.sendStatus('idle');
-        }, this.PTY_IDLE_TIMEOUT);
+        }, timeout);
     }
 
     private cleanup(): void {
