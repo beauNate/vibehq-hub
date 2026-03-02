@@ -38,7 +38,21 @@ export function registerPublishArtifact(server: McpServer, hub: HubClient, team:
                     // File already exists (from share_file or prior publish) — do NOT overwrite
                     // Only register metadata with the Hub
                 } else if (args.content) {
-                    // File doesn't exist yet — write the provided content
+                    // Stub detection: reject pointer/reference content
+                    const STUB_PATTERNS = ['see shared', 'see file', 'published as', 'available via', 'refer to'];
+                    const isStub = args.content.length < 200 &&
+                        STUB_PATTERNS.some(p => args.content!.toLowerCase().includes(p));
+                    if (isStub) {
+                        return {
+                            content: [{
+                                type: 'text' as const,
+                                text: `❌ Content appears to be a reference pointer (${args.content.length} bytes), not actual content. ` +
+                                    `If you already called share_file, you can omit the content field — the file is already registered. ` +
+                                    `Otherwise, pass the FULL file content in the 'content' field.`,
+                            }],
+                            isError: true,
+                        };
+                    }
                     writeFileSync(filepath, args.content, 'utf-8');
                 } else {
                     return {

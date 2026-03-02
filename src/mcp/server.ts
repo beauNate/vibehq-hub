@@ -23,10 +23,12 @@ export interface AgentOptions {
     team?: string;
     askTimeout?: number;
     cli?: string;
+    cwd?: string;
 }
 
 export async function startAgent(options: AgentOptions): Promise<void> {
     const { name, role, hubUrl, team = 'default', askTimeout = 120000, cli } = options;
+    const cwd = options.cwd || process.cwd();
 
     // Create MCP server
     const server = new McpServer({
@@ -35,7 +37,7 @@ export async function startAgent(options: AgentOptions): Promise<void> {
     });
 
     // Create Hub client
-    const hub = new HubClient(hubUrl, name, role, team, askTimeout, cli);
+    const hub = new HubClient(hubUrl, name, role, team, askTimeout, cli, cwd);
 
     // Register all MCP tools
     registerListTeammates(server, hub);
@@ -43,7 +45,7 @@ export async function startAgent(options: AgentOptions): Promise<void> {
     registerAssignTask(server, hub);
     registerCheckStatus(server, hub);
     registerReplyToTeam(server, hub);
-    registerShareFile(server, team);
+    registerShareFile(server, team, hub);
     registerReadSharedFile(server, team);
     registerListSharedFiles(server, team);
     registerPostUpdate(server, hub);

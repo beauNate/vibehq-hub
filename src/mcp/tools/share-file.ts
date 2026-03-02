@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join } from 'path';
 import { homedir } from 'os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { HubClient } from '../hub-client.js';
 
 function getSharedDir(team: string): string {
     const dir = join(homedir(), '.vibehq', 'teams', team, 'shared');
@@ -16,10 +17,10 @@ function getSharedDir(team: string): string {
     return dir;
 }
 
-export function registerShareFile(server: McpServer, team: string): void {
+export function registerShareFile(server: McpServer, team: string, hub: HubClient): void {
     server.tool(
         'share_file',
-        'Share a file with your team. The file will be saved to the team shared folder, accessible by all teammates. Use this for API specs, schemas, sample data, and other documents.',
+        'Share a file with your team. The file is saved to the shared folder AND automatically registered as an artifact — you do NOT need to call publish_artifact separately.',
         {
             filename: z.string().describe('Filename to save (e.g. "api-spec.md", "sample-response.json")'),
             content: z.string().describe('File content to share'),
@@ -29,6 +30,17 @@ export function registerShareFile(server: McpServer, team: string): void {
                 const dir = getSharedDir(team);
                 const filepath = join(dir, filename);
                 writeFileSync(filepath, content, 'utf-8');
+
+                // Auto-register as artifact so orchestrator sees it immediately
+                // Infer type from extension
+                const ext = filename.split('.').pop()?.toLowerCase() || '';
+                const typeMap: Record<string, string> = {
+                    json: 'code', md: 'spec', html: 'code', css: 'code',
+                    js: 'code', ts: 'code', txt: 'other',
+                };
+                const artifactType = typeMap[ext] || 'other';
+                hub.publishArtifact(filename, artifactType as any, `Shared file (${content.length} bytes)`);
+
                 return {
                     content: [{
                         type: 'text' as const,
@@ -37,6 +49,8 @@ export function registerShareFile(server: McpServer, team: string): void {
                             filename,
                             path: filepath,
                             size: content.length,
+                            artifact_registered: true,
+                            note: 'File shared AND registered as artifact. No need to call publish_artifact separately.',
                         }),
                     }],
                 };

@@ -148,6 +148,54 @@ export function startHub(options: HubOptions): WebSocketServer {
         }
     });
 
+    // --- Heartbeat / Liveness Monitor ---
+    const HEARTBEAT_INTERVAL = 30_000;   // Check every 30 seconds
+    const HEARTBEAT_TIMEOUT = 90_000;    // 90 seconds without activity = offline
+    const offlineNotified = new Set<string>(); // Track already-notified agents
+
+    const heartbeatTimer = setInterval(() => {
+        const allAgents = registry.getAllAgents();
+        for (const agent of allAgents) {
+            // Get ConnectedAgent with lastActivity
+            const connected = registry.getAgentByName(agent.name);
+            if (!connected) continue;
+
+            const lastSeen = connected.lastActivity || 0;
+            const elapsed = Date.now() - lastSeen;
+
+            if (lastSeen > 0 && elapsed > HEARTBEAT_TIMEOUT && !offlineNotified.has(agent.name)) {
+                offlineNotified.add(agent.name);
+
+                // Notify orchestrator (PM role agents)
+                const pmAgents = allAgents.filter(a => a.role === 'Project Manager' && a.name !== agent.name);
+                for (const pm of pmAgents) {
+                    queueOrDeliver(pm.name, connected.team, {
+                        type: 'relay:reply:delivered',
+                        fromAgent: 'Hub',
+                        message: `⚠️ [AGENT UNRESPONSIVE] ${agent.name} has not responded for ${Math.round(elapsed / 1000)}s. ` +
+                            `Any tasks assigned to ${agent.name} should be reassigned to another agent.`,
+                    });
+                }
+
+                // Mark active tasks as blocked
+                for (const [, task] of taskStore) {
+                    if (task.assignee === agent.name && task.status !== 'done' && task.status !== 'rejected') {
+                        task.status = 'blocked';
+                        task.statusNote = 'agent_unresponsive';
+                        task.updatedAt = new Date().toISOString();
+                    }
+                }
+
+                if (verbose) console.log(`[Hub] Agent ${agent.name}: UNRESPONSIVE (${Math.round(elapsed / 1000)}s)`);
+                saveState();
+            } else if (lastSeen > 0 && elapsed <= HEARTBEAT_TIMEOUT && offlineNotified.has(agent.name)) {
+                // Agent came back
+                offlineNotified.delete(agent.name);
+                if (verbose) console.log(`[Hub] Agent ${agent.name}: back online`);
+            }
+        }
+    }, HEARTBEAT_INTERVAL);
+
     const wss = new WebSocketServer({ port });
 
     wss.on('error', (err: NodeJS.ErrnoException) => {
@@ -171,6 +219,10 @@ export function startHub(options: HubOptions): WebSocketServer {
                 console.error('[Hub] Invalid JSON received');
                 return;
             }
+
+            // Track activity for heartbeat/liveness detection
+            const sender = registry.getAgentByWs(ws);
+            if (sender) sender.lastActivity = Date.now();
 
             switch (msg.type) {
                 case 'agent:register':
@@ -349,16 +401,13 @@ export function startHub(options: HubOptions): WebSocketServer {
                                 .map((d: any) => d.task_id);
                             taskStore.set(taskId, task);
 
-                            // Notify assignee that task is queued
+                            // Notify assignee — minimal info only, NO full description
+                            // Full task details will be sent when all dependencies are ready
                             queueOrDeliver(msg.assignee, creator.team, {
                                 type: 'relay:reply:delivered',
                                 fromAgent: creator.name,
-                                message: `[TASK ${taskId}] ${msg.title} — QUEUED\n` +
-                                    `This task is waiting for:\n` +
-                                    pendingDeps.map((d: any) =>
-                                        d.task_id ? `- Task ${d.task_id}` : `- Artifact: ${d.artifact}`
-                                    ).join('\n') +
-                                    `\nYou will be notified when all dependencies are ready.`,
+                                message: `[TASK ${taskId}] QUEUED — waiting for ${pendingDeps.length} dependenc${pendingDeps.length === 1 ? 'y' : 'ies'}.\n` +
+                                    `You will receive the full task description when all inputs are ready. Please stand by.`,
                             });
 
                             // Broadcast to team

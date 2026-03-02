@@ -55,13 +55,16 @@ export class HubClient extends EventEmitter {
     private teammates: Map<string, Agent> = new Map();
     private askTimeout: number;
     private agentCli: string | undefined;
+    private agentCwd: string | undefined;
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Set to true when Hub sends 'agent:replaced' — prevents reconnection after dedup kick */
+    private replacedByDedup = false;
     private pendingUpdateRequests: Map<string, (updates: TeamUpdate[]) => void> = new Map();
     private pendingTaskListRequests: Map<string, (tasks: TaskState[]) => void> = new Map();
     private pendingArtifactListRequests: Map<string, (artifacts: ArtifactMeta[]) => void> = new Map();
     private pendingContractCheckRequests: Map<string, (contracts: ContractState[]) => void> = new Map();
 
-    constructor(hubUrl: string, name: string, role: string, team = 'default', askTimeout = 120000, cli?: string) {
+    constructor(hubUrl: string, name: string, role: string, team = 'default', askTimeout = 120000, cli?: string, cwd?: string) {
         super();
         this.hubUrl = hubUrl;
         this.agentName = name;
@@ -69,6 +72,7 @@ export class HubClient extends EventEmitter {
         this.agentTeam = team;
         this.askTimeout = askTimeout;
         this.agentCli = cli;
+        this.agentCwd = cwd;
     }
 
     /**
@@ -87,6 +91,7 @@ export class HubClient extends EventEmitter {
                         role: this.agentRole,
                         team: this.agentTeam,
                         cli: this.agentCli,
+                        cwd: this.agentCwd,
                     } satisfies AgentRegisterMessage);
                 });
 
@@ -131,6 +136,12 @@ export class HubClient extends EventEmitter {
                             this.emit('team:update', (msg as TeamUpdateBroadcastMessage).update);
                             break;
 
+                        case 'agent:replaced':
+                            // Hub kicked us because another agent took our slot (name or cwd+cli dedup)
+                            console.error(`[HubClient] Replaced by dedup (reason: ${msg.reason}, replacedBy: ${msg.replacedBy}). Will NOT reconnect.`);
+                            this.replacedByDedup = true;
+                            break;
+
                         case 'team:update:list:response':
                             this.handleUpdateListResponse(msg as TeamUpdateListResponseMessage);
                             break;
@@ -165,6 +176,10 @@ export class HubClient extends EventEmitter {
                 });
 
                 this.ws.on('close', () => {
+                    if (this.replacedByDedup) {
+                        console.error(`[HubClient] Connection closed by dedup. NOT reconnecting.`);
+                        return;
+                    }
                     console.error(`[HubClient] Connection to Hub lost. Attempting reconnect...`);
                     this.scheduleReconnect();
                 });

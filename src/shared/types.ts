@@ -14,6 +14,7 @@ export interface Agent {
     status: AgentStatus;
     team?: string;
     cli?: string;
+    cwd?: string;
 }
 
 // --- WS Messages: Agent Registration ---
@@ -25,6 +26,7 @@ export interface AgentRegisterMessage {
     capabilities?: string[];
     team?: string;
     cli?: string;
+    cwd?: string;
 }
 
 export interface AgentRegisteredMessage {
