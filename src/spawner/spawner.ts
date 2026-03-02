@@ -143,12 +143,77 @@ export class AgentSpawner {
         const { name, role, hubUrl, team, command } = this.options;
         const cmd = command.toLowerCase();
 
+        // Run migration cleanup on every spawn (safe + idempotent)
         if (cmd === 'claude' || cmd.includes('claude')) {
+            this.migrateClaudeMcpConfig();
             this.configureClaudeMcp(name, role, hubUrl, team);
         } else if (cmd === 'codex' || cmd.includes('codex')) {
             this.configureCodexMcp(name, role, hubUrl, team);
         } else if (cmd === 'gemini' || cmd.includes('gemini')) {
             this.configureGeminiMcp(name, role, hubUrl, team);
+        }
+    }
+
+    /**
+     * Migration: clean up stale vibehq_* MCP entries and duplicate project keys.
+     * Safe to run on every startup — only modifies if duplicates or bad paths found.
+     */
+    private migrateClaudeMcpConfig(): void {
+        const claudeJsonPath = join(homedir(), '.claude.json');
+        if (!existsSync(claudeJsonPath)) return;
+
+        let config: any;
+        try { config = JSON.parse(readFileSync(claudeJsonPath, 'utf-8')); } catch { return; }
+        if (!config.projects) return;
+
+        let modified = false;
+
+        // 1. Remove duplicate vibehq_* entries per project (keep none — fresh spawn will write correct one)
+        for (const key of Object.keys(config.projects)) {
+            const ms = config.projects[key]?.mcpServers;
+            if (!ms) continue;
+            const vkeys = Object.keys(ms).filter(k => k.startsWith('vibehq_'));
+            if (vkeys.length > 1) {
+                for (const vk of vkeys) {
+                    delete ms[vk];
+                }
+                modified = true;
+            }
+        }
+
+        // 2. Clean vibehq_* entries on root-level paths (C:/, D:/, /) to prevent drive-wide pollution
+        for (const key of Object.keys(config.projects)) {
+            const norm = key.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '');
+            if (/^[A-Za-z]:$/.test(norm) || norm === '' || norm === '/') {
+                const ms = config.projects[key]?.mcpServers;
+                if (!ms) continue;
+                for (const vk of Object.keys(ms).filter(k => k.startsWith('vibehq_'))) {
+                    delete ms[vk];
+                    modified = true;
+                }
+            }
+        }
+
+        // 3. Deduplicate project keys with equivalent paths (D://x → D:/x)
+        const normalize = (p: string) => p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '').toLowerCase();
+        const seen = new Map<string, string>(); // normalized → first key
+        for (const key of Object.keys(config.projects)) {
+            const norm = normalize(key);
+            if (seen.has(norm)) {
+                // Merge mcpServers into the first seen key, then delete this duplicate
+                const primary = seen.get(norm)!;
+                const srcServers = config.projects[key]?.mcpServers || {};
+                if (!config.projects[primary].mcpServers) config.projects[primary].mcpServers = {};
+                Object.assign(config.projects[primary].mcpServers, srcServers);
+                delete config.projects[key];
+                modified = true;
+            } else {
+                seen.set(norm, key);
+            }
+        }
+
+        if (modified) {
+            writeFileSync(claudeJsonPath, JSON.stringify(config, null, 2));
         }
     }
 
@@ -167,7 +232,14 @@ export class AgentSpawner {
 
         // Claude Code uses forward-slash path keys on Windows
         const cwd = this.options.cwd || process.cwd();
-        const cwdForward = cwd.replace(/\\/g, '/');
+        // Normalize: backslash→forward, collapse double slashes, remove trailing slash
+        const cwdForward = cwd.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '');
+
+        // Guard: never register MCP at drive root — it would infect ALL sessions on that drive
+        if (/^[A-Za-z]:$/.test(cwdForward) || cwdForward === '/') {
+            console.warn(`[Spawner] Refusing to register MCP at root path: ${cwdForward}`);
+            return;
+        }
 
         // Agent-specific key prevents concurrent spawn overwrites
         const serverKey = `vibehq_${name.toLowerCase().replace(/\s+/g, '_')}`;
@@ -182,11 +254,18 @@ export class AgentSpawner {
         // Update all matching project keys (both / and \ variants)
         let found = false;
         for (const key of Object.keys(config.projects)) {
-            const normalizedKey = key.replace(/\\/g, '/').toLowerCase();
+            const normalizedKey = key.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '').toLowerCase();
             if (normalizedKey === cwdForward.toLowerCase()) {
                 if (!config.projects[key].mcpServers) config.projects[key].mcpServers = {};
                 // Remove legacy shared 'team' key if present
                 delete config.projects[key].mcpServers.team;
+                // Remove ALL old vibehq_* entries to prevent duplicates from name changes
+                for (const k of Object.keys(config.projects[key].mcpServers)) {
+                    if (k.startsWith('vibehq_')) {
+                        delete config.projects[key].mcpServers[k];
+                    }
+                }
+                // Write only the current agent's entry
                 config.projects[key].mcpServers[serverKey] = teamServer;
                 found = true;
             }
@@ -577,9 +656,11 @@ export class AgentSpawner {
                             this.sendStatus('idle');
                         } else if (msg.type === 'assistant' && msg.message?.stop_reason === 'end_turn') {
                             // Layer 2: end_turn with debounce (3s) — fallback when turn_duration is missing
+                            // Cancel previous debounce if any
                             if (this.endTurnDebounce) clearTimeout(this.endTurnDebounce);
                             this.endTurnDebounce = setTimeout(() => {
                                 this.endTurnDebounce = null;
+                                // Only fire if we're still in 'working' state
                                 if (this.currentStatus === 'working') {
                                     this.sendStatus('idle');
                                 }

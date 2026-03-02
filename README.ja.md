@@ -30,6 +30,7 @@
   <a href="#%EF%B8%8F-クイックスタート">クイックスタート</a> •
   <a href="#-仕組み">仕組み</a> •
   <a href="#-設定">設定</a> •
+  <a href="#-ベンチマーク">ベンチマーク</a> •
   <a href="#-デモ">デモ</a>
 </p>
 
@@ -94,6 +95,35 @@ https://github.com/user-attachments/assets/ea254931-9981-4eb6-8db3-44480ec88041
 #### タスク割り当て — PM がタスクを作成しエンジニアに割り当て
 
 https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
+
+---
+
+## 📊 ベンチマーク
+
+統制されたタスクでテスト：「$NVDA を分析しインタラクティブ HTML ダッシュボードを構築」
+同一のチーム構成（オーケストレーター 1 名 + ワーカー 3 名）でフレームワークバージョン間を比較。
+
+| | V1（変更前） | V2（変更後） | 単一エージェント |
+|---|---|---|---|
+| 時間 | 107 分 | 58 分 | 9.5 分 |
+| 最終成果物 | ❌ 破損 | ✅ 動作（62KB） | ✅ 動作（70KB） |
+| スキーマ競合 | 15 | 2 | 0 |
+| オーケストレーターによる手動コード修正 | 6 | 0 | 0 |
+| QA で検出されたデータエラー | 0（QA なし） | 7 | 0（QA なし） |
+
+**V1 → V2 の主な改善点：**
+- 構造化タスク契約（`output_target`、`REQUIRED INPUTS`）によりスキーマ不一致を排除
+- エージェントハートビート監視が 60 秒以内にオフラインエージェントを自動検出
+- QA 検証フェーズが最終納品前にデータエラーを検出
+- オーケストレーターのコード介入ゼロ（V1 の 6 回の手動 JS パッチに対して）
+
+**マルチエージェント vs 単一エージェントの使い分け：**
+マルチエージェントは、独立した QA 検証、異種ツールアクセス、
+または単一コンテキストウィンドウを超えるワークロードが必要な場合に価値を発揮します。
+小規模なタスクでは、単一エージェントの方が大幅に高速です。
+
+📖 [From Native LLM Collaboration Problems to a Controllable Multi-Agent Framework](blog/llm-native-problems-to-controllable-framework-en.md)
+📊 [Full Benchmark: V1 vs V2 Improvement Report](benchmarks/vibhq-v1-vs-v2-improvement-report.md)
 
 ---
 

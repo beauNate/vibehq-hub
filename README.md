@@ -30,6 +30,7 @@
   <a href="#%EF%B8%8F-quickstart">Quickstart</a> •
   <a href="#-how-it-works">How It Works</a> •
   <a href="#-configuration">Configuration</a> •
+  <a href="#-benchmarks">Benchmarks</a> •
   <a href="#-demo">Demo</a>
 </p>
 
@@ -97,7 +98,36 @@ https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
 
 ---
 
-## 🔬 Why This Architecture Matters
+## � Benchmarks
+
+Tested on a controlled task: "Analyze $NVDA and build an interactive HTML dashboard"
+with identical team composition (1 orchestrator + 3 workers) across framework versions.
+
+| | V1 (Before) | V2 (After) | Single Agent |
+|---|---|---|---|
+| Time | 107 min | 58 min | 9.5 min |
+| Final Output | ❌ Broken | ✅ Working (62KB) | ✅ Working (70KB) |
+| Schema Conflicts | 15 | 2 | 0 |
+| Manual Code Fixes by Orchestrator | 6 | 0 | 0 |
+| Data Errors Caught by QA | 0 (no QA) | 7 | 0 (no QA) |
+
+**Key improvements V1 → V2:**
+- Structured task contracts (`output_target`, `REQUIRED INPUTS`) eliminated schema mismatches
+- Agent heartbeat monitoring auto-detects offline agents within 60s
+- QA validation phase catches data errors before final delivery
+- Zero orchestrator code interventions (vs 6 manual JS patches in V1)
+
+**When to use multi-agent vs single agent:**
+Multi-agent adds value when tasks require independent QA verification,
+heterogeneous tool access, or workloads exceeding a single context window.
+For small-scope tasks, a single agent is significantly faster.
+
+📖 [From Native LLM Collaboration Problems to a Controllable Multi-Agent Framework](blog/llm-native-problems-to-controllable-framework-en.md)
+📊 [Full Benchmark: V1 vs V2 Improvement Report](benchmarks/vibhq-v1-vs-v2-improvement-report.md)
+
+---
+
+## �🔬 Why This Architecture Matters
 
 ### Real Agent Isolation
 Each agent runs as a **separate OS process** in its own PTY (pseudo-terminal). This isn't threads or coroutines — it's full process isolation. An agent's crash doesn't take down the team. An agent's context window is entirely its own. This is how real engineering teams work: separate machines, separate contexts, shared protocols.

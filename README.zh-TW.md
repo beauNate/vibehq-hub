@@ -30,6 +30,7 @@
   <a href="#%EF%B8%8F-快速開始">快速開始</a> •
   <a href="#-運作原理">運作原理</a> •
   <a href="#-設定">設定</a> •
+  <a href="#-基準測試">基準測試</a> •
   <a href="#-展示">展示</a>
 </p>
 
@@ -94,6 +95,34 @@ https://github.com/user-attachments/assets/ea254931-9981-4eb6-8db3-44480ec88041
 #### 分派任務 — PM 建立並分派任務給工程師
 
 https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
+
+---
+
+## 📊 基準測試
+
+以控制實驗測試：「分析 $NVDA 並建構互動式 HTML 儀表板」
+使用相同的團隊組成（1 個協調者 + 3 個工作者）跨框架版本比較。
+
+| | V1（變更前） | V2（變更後） | 單一 Agent |
+|---|---|---|---|
+| 時間 | 107 分鐘 | 58 分鐘 | 9.5 分鐘 |
+| 最終產出 | ❌ 損壞 | ✅ 正常運作（62KB） | ✅ 正常運作（70KB） |
+| Schema 衝突 | 15 | 2 | 0 |
+| 協調者手動修復程式碼 | 6 | 0 | 0 |
+| QA 攔截的資料錯誤 | 0（無 QA） | 7 | 0（無 QA） |
+
+**V1 → V2 關鍵改進：**
+- 結構化任務契約（`output_target`、`REQUIRED INPUTS`）消除了 Schema 不一致
+- Agent 心跳監控在 60 秒內自動偵測離線 Agent
+- QA 驗證階段在最終交付前攔截資料錯誤
+- 協調者零次程式碼介入（對比 V1 的 6 次手動 JS 修補）
+
+**何時使用多智能體 vs 單一 Agent：**
+多智能體在需要獨立 QA 驗證、異質工具存取、或超過單一 context window 容量的工作負載時才有優勢。
+對於小範圍任務，單一 Agent 顯著更快。
+
+📖 [從 LLM 原生協作問題到可控的多智能體框架](blog/llm-native-problems-to-controllable-framework-zh.md)
+📊 [完整基準測試：V1 vs V2 改進報告](benchmarks/vibhq-v1-vs-v2-improvement-report-zh-TW.md)
 
 ---
 
