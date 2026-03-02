@@ -98,7 +98,7 @@ https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
 
 ---
 
-## � Benchmarks
+## 📊 Benchmarks
 
 Tested on a controlled task: "Analyze $NVDA and build an interactive HTML dashboard"
 with identical team composition (1 orchestrator + 3 workers) across framework versions.
@@ -127,7 +127,7 @@ For small-scope tasks, a single agent is significantly faster.
 
 ---
 
-## �🔬 Why This Architecture Matters
+## 🔬 Why This Architecture Matters
 
 ### Real Agent Isolation
 Each agent runs as a **separate OS process** in its own PTY (pseudo-terminal). This isn't threads or coroutines — it's full process isolation. An agent's crash doesn't take down the team. An agent's context window is entirely its own. This is how real engineering teams work: separate machines, separate contexts, shared protocols.
