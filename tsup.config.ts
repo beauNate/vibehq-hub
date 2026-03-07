@@ -7,6 +7,7 @@ export default defineConfig({
         'bin/agent': 'bin/agent.ts',
         'bin/spawn': 'bin/spawn.ts',
         'bin/start': 'bin/start.ts',
+        'bin/analyze': 'bin/analyze.ts',
     },
     format: ['esm'],
     target: 'node18',
@@ -26,7 +27,7 @@ export default defineConfig({
     onSuccess: async () => {
         // Add shebang to bin files after build
         const fs = await import('fs');
-        const binFiles = ['dist/bin/hub.js', 'dist/bin/agent.js', 'dist/bin/spawn.js', 'dist/bin/start.js'];
+        const binFiles = ['dist/bin/hub.js', 'dist/bin/agent.js', 'dist/bin/spawn.js', 'dist/bin/start.js', 'dist/bin/analyze.js'];
         for (const file of binFiles) {
             try {
                 const content = fs.readFileSync(file, 'utf-8');

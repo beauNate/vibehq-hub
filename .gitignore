@@ -7,3 +7,6 @@ Thumbs.db
 npm-debug.log*
 .env
 .env.*
+
+# Analytics local config (may contain API keys)
+analytics-config.json

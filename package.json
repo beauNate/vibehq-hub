@@ -9,7 +9,8 @@
     "vibehq": "./dist/bin/start.js",
     "vibehq-hub": "./dist/bin/hub.js",
     "vibehq-agent": "./dist/bin/agent.js",
-    "vibehq-spawn": "./dist/bin/spawn.js"
+    "vibehq-spawn": "./dist/bin/spawn.js",
+    "vibehq-analyze": "./dist/bin/analyze.js"
   },
   "files": [
     "dist/"

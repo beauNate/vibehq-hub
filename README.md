@@ -30,6 +30,7 @@
   <a href="#%EF%B8%8F-quickstart">Quickstart</a> •
   <a href="#-how-it-works">How It Works</a> •
   <a href="#-configuration">Configuration</a> •
+  <a href="#-post-run-analytics">Analytics</a> •
   <a href="#-benchmarks">Benchmarks</a> •
   <a href="#-demo">Demo</a>
 </p>
@@ -162,6 +163,13 @@ Agents don't communicate through prompt injection hacks. They use **20 purpose-b
 - **Idle-Aware Queue** — Messages queue when agents are busy, flush when idle
 - **State Persistence** — All data survives Hub restarts via JSON file storage
 
+### 📊 Post-Run Analytics
+- **Built-in post-run analytics with automated failure pattern detection**
+- **Dual Format Support** — Parses both Claude Code and Codex CLI native JSONL logs
+- **13 Detection Rules** — Stub files, artifact regression, context bloat, coordination overhead, unresponsive agents, and more
+- **LLM-Powered Analysis** — Optional deep analysis via Anthropic or OpenAI APIs with graded report cards
+- **Run History & Comparison** — Track metrics across runs, compare improvements over time
+
 ### 🧠 Smart Detection
 - **Claude JSONL Watcher** — Parses `~/.claude/projects/` transcript files to detect idle/working in real-time
 - **PTY Output Timeout** — Fallback idle detection for Codex/Gemini (10s silence = idle)
@@ -195,7 +203,7 @@ npm run build
 npm link
 ```
 
-This globally registers `vibehq`, `vibehq-spawn`, and `vibehq-hub` commands.
+This globally registers `vibehq`, `vibehq-spawn`, `vibehq-hub`, and `vibehq-analyze` commands.
 
 ### Launch (Windows — TUI Mode)
 
@@ -510,6 +518,89 @@ PM creates task ──► Engineer accepts ──► Writes spec
 
 ---
 
+## 📊 Post-Run Analytics
+
+After a team session ends, analyze the JSONL logs to understand what went well and what didn't.
+
+### Quick Start
+
+```bash
+# Analyze a session (directory of JSONL logs or single file)
+vibehq-analyze ./data
+
+# Save results and get LLM-powered insights
+vibehq-analyze ./data --save --with-llm
+
+# View as JSON
+vibehq-analyze ./data --json
+```
+
+### Analysis Pipeline
+
+```
+JSONL Logs ──► Normalizer ──► Metrics ──► Pattern Detection ──► Report
+  (Claude +      (Stage 0)    (Stage 1)     (Stage 2)          ┃
+   Codex)                                                       ▼
+                                                          LLM Analyst
+                                                           (Stage 3)
+                                                               ┃
+                                                               ▼
+                                                        History Store
+                                                           (Stage 4)
+```
+
+### 13 Automated Detection Rules
+
+| Rule | Severity | What It Detects |
+|------|----------|-----------------|
+| `ARTIFACT_REGRESSION` | Critical | Agent's output size decreased between attempts (content regression) |
+| `ORCHESTRATOR_ROLE_DRIFT` | Critical | Orchestrator used implementation tools (Write/Edit/Bash) |
+| `STUB_FILE` | High | Agent published placeholder/stub instead of full content |
+| `TASK_TIMEOUT` | High | Task took longer than 15 minutes |
+| `INCOMPLETE_TASK` | High | Task was never completed |
+| `HIGH_COORDINATION_OVERHEAD` | High | Orchestrator consumed >30% of output tokens |
+| `AGENT_UNRESPONSIVE` | High | Agent never connected or completed zero tasks |
+| `NO_ARTIFACTS_PRODUCED` | High | Worker agent produced zero artifacts |
+| `CONTEXT_BLOAT` | Medium | Agent context grew more than 5x during session |
+| `DUPLICATE_ARTIFACT` | Medium | Multiple agents produced same filename |
+| `PREMATURE_TASK_ACCEPT` | Medium/Info | Agent accepted task within 10s of creation |
+| `EXCESSIVE_MCP_POLLING` | Low | Agent called check_status/list_tasks >20 times |
+| `TASK_REASSIGNED` | Info | Task was reassigned to a different agent |
+
+### Run History & Comparison
+
+```bash
+# View past runs
+vibehq-analyze history --last 10
+
+# Compare two runs side-by-side
+vibehq-analyze compare run-v1 run-v2
+
+# Show a saved run
+vibehq-analyze show <run-id>
+
+# List all saved run IDs
+vibehq-analyze list
+```
+
+### LLM Analysis Configuration
+
+```bash
+# Configure API key (persisted to ~/.vibehq/analytics/config.json)
+vibehq-analyze config --set-key sk-ant-xxx
+vibehq-analyze config --set-provider anthropic   # or openai
+vibehq-analyze config --set-model claude-sonnet-4-20250514
+
+# Show current config
+vibehq-analyze config
+```
+
+Config priority: CLI flags > env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) > `~/.vibehq/analytics/config.json` > `vibehq.config.json` (model/provider only)
+
+> ⚠️ **Security:** API keys are never read from `vibehq.config.json` since it's tracked by git. Always use `config --set-key` (saves to `~/.vibehq/`) or environment variables.
+
+---
+
 ## 🛠 CLI Reference
 
 ### Commands
@@ -519,6 +610,17 @@ vibehq              # Interactive TUI (Windows recommended)
 vibehq start        # Start a team directly from config
 vibehq init         # Create a new vibehq.config.json
 vibehq dashboard    # Dashboard only (connect to existing hub)
+```
+
+### Post-Run Analytics
+
+```bash
+vibehq-analyze ./data              # Analyze logs
+vibehq-analyze ./data --save       # Save to history
+vibehq-analyze ./data --with-llm   # With LLM analysis
+vibehq-analyze history             # View run history
+vibehq-analyze compare id1 id2     # Compare runs
+vibehq-analyze config              # Show/set LLM config
 ```
 
 ### Standalone Hub
@@ -551,7 +653,8 @@ agent-hub/
 │   ├── start.ts          # Main CLI entry (TUI, team management)
 │   ├── spawn.ts          # Single agent spawner CLI
 │   ├── hub.ts            # Standalone hub server
-│   └── agent.ts          # MCP agent server
+│   ├── agent.ts          # MCP agent server
+│   └── analyze.ts        # Post-run analytics CLI
 ├── src/
 │   ├── hub/
 │   │   ├── server.ts     # WebSocket hub + V2 stores + persistence
@@ -564,6 +667,14 @@ agent-hub/
 │   │   └── tools/        # 20 MCP tool implementations
 │   ├── shared/
 │   │   └── types.ts      # Shared TypeScript types (V2 messages)
+│   ├── analyzer/
+│   │   ├── normalizer.ts      # Stage 0: JSONL log normalizer (Claude + Codex)
+│   │   ├── metrics-extractor.ts # Stage 1: Events → RunMetrics
+│   │   ├── pattern-detector.ts  # Stage 2: 13 automated detection rules
+│   │   ├── llm-analyst.ts      # Stage 3: LLM-powered report cards
+│   │   ├── history-store.ts    # Stage 4: Run persistence & comparison
+│   │   ├── config.ts           # 4-layer config management
+│   │   └── formatter.ts        # Terminal report formatting
 │   └── tui/
 │       ├── role-presets.ts    # Built-in role system prompts (V2)
 │       └── screens/           # Dashboard, welcome, settings, create-team
