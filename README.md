@@ -255,28 +255,27 @@ vibehq-spawn --name "Casey" --role "QA Engineer" \
 
 ## ⚠️ Platform Support
 
-> **VibeHQ is currently developed and tested on Windows.**
-> Mac and Linux support is planned and architecturally supported, but has not been fully tested yet.
+> **VibeHQ is developed on Windows and tested on both Windows and macOS.**
 
 | Feature | Windows | Mac | Linux |
 |---------|---------|-----|-------|
-| TUI (interactive team launcher) | ✅ Tested | ⚠️ Untested (iTerm2/Terminal.app) | ⚠️ Untested (gnome-terminal/xterm) |
-| Hub server | ✅ Tested | ✅ Should work | ✅ Should work |
-| Manual spawn (`vibehq-spawn`) | ✅ Tested | ✅ Should work | ✅ Should work |
-| Claude JSONL idle detection | ✅ Tested | ⚠️ Path encoding may differ | ⚠️ Path encoding may differ |
-| PTY spawning (node-pty) | ✅ Tested | ⚠️ Untested | ⚠️ Untested |
-| MCP auto-configuration | ✅ Tested | ⚠️ Config paths may differ | ⚠️ Config paths may differ |
+| TUI (interactive team launcher) | ✅ Tested | ✅ Tested (Terminal.app/iTerm2) | ⚠️ Untested (gnome-terminal/xterm/tmux) |
+| Hub server | ✅ Tested | ✅ Tested | ✅ Should work |
+| Manual spawn (`vibehq-spawn`) | ✅ Tested | ✅ Tested | ✅ Should work |
+| Claude JSONL idle detection | ✅ Tested | ✅ Tested | ⚠️ Path encoding may differ |
+| PTY spawning (node-pty) | ✅ Tested | ✅ Tested | ⚠️ Untested |
+| MCP auto-configuration | ✅ Tested | ✅ Tested | ⚠️ Config paths may differ |
 
 ### Potential Issues on Mac/Linux
 
-- **Terminal spawning**: The TUI uses `wt` (Windows Terminal) on Windows, `osascript` on Mac, and `gnome-terminal`/`xterm` on Linux. If your terminal emulator isn't detected, use manual `vibehq-spawn` commands instead.
+- **Terminal spawning**: The TUI uses `wt` (Windows Terminal) on Windows, `osascript` with temp launcher scripts on Mac (iTerm2 → Terminal.app → `open` fallback), and `gnome-terminal`/`xterm`/`tmux` on Linux. If your terminal emulator isn't detected, use manual `vibehq-spawn` commands instead.
 - **Claude JSONL path encoding**: Claude Code encodes project paths differently on each OS (`\` vs `/`). The watcher uses regex replacement that should handle both, but edge cases may exist.
 - **node-pty compilation**: `node-pty` requires native compilation. On Mac, ensure Xcode Command Line Tools are installed (`xcode-select --install`). On Linux, ensure `build-essential` and `python3` are available.
 - **node-pty spawn-helper permission (macOS)**: The prebuilt `spawn-helper` binary may be installed without executable permission (`0644`). Our `postinstall` script fixes this automatically. If you still see `posix_spawnp failed`, run: `chmod +x node_modules/node-pty/prebuilds/*/spawn-helper`
 - **MCP config paths**: Claude stores MCP config at `~/.claude/` on all platforms, but Codex (`~/.codex/`) and Gemini (`~/.gemini/`) paths may vary.
 - **File path separators**: Config file paths use `\\` for Windows. On Mac/Linux, use `/` instead.
 
-> 🍎 **Mac testing is coming soon.** Once verified, this section will be updated with confirmed support status.
+> 🐧 **Linux testing is coming soon.** The architecture supports Linux terminals and tmux — once verified, this section will be updated.
 
 ---
 
