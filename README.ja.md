@@ -55,17 +55,65 @@ VibeHQ は実際の CLI エージェントの上に置かれる**チームワー
 | 品質チェックなし | **独立 QA** — 別のエージェントがソースドキュメントに対してデータを検証 |
 | 事後分析なし | **13 の自動検出ルール** — セッションログの障害パターンを分析 |
 
-### 結果：V1 → V2
+---
 
-| | V1（プロトコルなし） | V2（VibeHQ あり） | 変化 |
-|---|---|---|---|
-| スキーマ競合 | 15 | 2 | **-87%** |
-| オーケストレーターの手動コード修正 | 6 | 0 | **排除** |
-| 最終出力に到達したデータエラー | 不明 | 0（QA が 7 件検出） | **新機能** |
-| エンドツーエンド時間 | 107 分 | 58 分 | **-46%** |
-| 最終成果物 | ❌ 破損 | ✅ 動作（62KB） | **修正** |
+## 自己改善する協調：4 回の反復で Grade D → B
 
-📊 **[完全なベンチマークレポート →](benchmarks/vibhq-v1-vs-v2-improvement-report.md)**
+VibeHQ はエージェントを協調させるだけでなく、**自身の失敗を分析し、コードを書いて修正します。**
+
+自動化ループを構築しました：ベンチマーク実行 → ログ分析 → `/optimize-protocol` が分析を読み取り、実際のコード変更を実装 → 再実行して測定：
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
+│ ベンチマーク │────▶│  vibehq-analyze   │────▶│ /optimize-protocol│
+│（チーム実行）│     │  --with-llm       │     │（Claude skill）   │
+└─────────────┘     └──────────────────┘     └───────────────────┘
+       ▲                                              │
+       │             実際のコード変更を書き込み         │
+       └──────────────────────────────────────────────┘
+```
+
+### 4 回の反復結果（同一 4 エージェント Todo App ベンチマーク）
+
+| | v1 | v2 | v3 | v4 |
+|---|---|---|---|---|
+| **グレード** | **D** | **C** | **C** | **B** |
+| 所要時間 | 47 分 | 13 分 | 10.3 分 | **9.4 分** |
+| フラグ（問題） | 13 | 9 | 11 | **7** |
+| クリティカルフラグ | 1 | 1 | 2 | **0** |
+| 並列効率 | 0.18 | 0.64 | 0.88 | 0.51 |
+
+**システムが各反復で学習し構築したもの：**
+
+| 反復 | 発見された問題 | 構築された修正 |
+|---|---|---|
+| v1→v2 | Hub が起動中にエージェントを誤って停止；PM がコードを書く | 起動猶予期間（180s）；ツール禁止付きロールプリセット |
+| v2→v3 | Codex PM がプロンプト制約を無視（shell_command 4→42 回） | `--disallowedTools` CLI レベル強制；PM を Claude に変更 |
+| v3→v4 | PM が Glob でワーカーを監視；成果物が 0 バイトに上書き | 禁止ツールリスト拡張；MCP 層で 0 バイトコンテンツ拒否 |
+
+**核心的洞察：** プロンプト制約は提案に過ぎない。CLI レベルの強制が法律。エージェントはソフトな制限に適応して迂回する — 修正はアーキテクチャレベルでなければならない。
+
+### 自分で試す
+
+```bash
+# 1. ベンチマーク実行
+vibehq start --team your-team
+
+# 2. 分析
+vibehq-analyze --team your-team --with-llm --save --run-id v1
+
+# 3. 自動最適化（Claude Code skill）
+/optimize-protocol v1
+
+# 4. 再実行、比較
+vibehq start --team your-team
+vibehq-analyze --team your-team --with-llm --save --run-id v2
+vibehq-analyze compare v1 v2
+```
+
+すべての最適化レポートは `~/.vibehq/analytics/optimizations/` に保存され、追跡と監査に使用できます。
+
+📖 **[完全なブログ記事：自己改善するマルチエージェント協調 →](blog-draft-self-improving-agents.md)**
 
 ---
 
@@ -135,21 +183,37 @@ https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
 
 ---
 
-<details>
-<summary><strong>📊 セッション後分析</strong></summary>
+## 📊 セッション後分析 & 自動最適化
+
+### 分析
 
 ```bash
-vibehq-analyze ./data                    # セッションログを分析
-vibehq-analyze ./data --save --with-llm  # 保存 + LLM 分析
-vibehq-analyze history --last 10         # 履歴を表示
-vibehq-analyze compare id1 id2           # 2 つの実行を比較
+vibehq-analyze ./data                        # セッションログを分析
+vibehq-analyze --team my-team --with-llm     # チームログ自動解決 + LLM 洞察
+vibehq-analyze --team my-team --with-llm --save --run-id v1  # 最適化用に保存
+vibehq-analyze compare v1 v2                 # 2 つの実行を並列比較
+vibehq-analyze history --last 10             # 履歴を表示
 ```
 
-13 の自動検出ルール：成果物リグレッション、オーケストレーター役割逸脱、スタブファイル、タスクタイムアウト、未完了タスク、調整オーバーヘッド、無応答エージェント、成果物ゼロ、コンテキスト肥大、重複成果物、早期タスク承認、過剰 MCP ポーリング、タスク再割り当て。
+**13 の自動検出ルール：** 成果物リグレッション、オーケストレーター役割逸脱、スタブファイル、タスクタイムアウト、未完了タスク、調整オーバーヘッド、無応答エージェント、成果物ゼロ、コンテキスト肥大、重複成果物、早期タスク承認、過剰 MCP ポーリング、タスク再割り当て。
+
+### `/optimize-protocol` — 自己改善スキル
+
+分析データを読み取り、フレームワークに**実際のコード修正を書き込む** Claude Code スキル：
+
+```bash
+/optimize-protocol v1    # v1 の分析を読み取り、修正を実装
+```
+
+機能：
+1. 現在の run + すべての過去の最適化レポートをロード
+2. クロスラン傾向テーブルを構築（改善中、回帰、副作用）
+3. 各問題を NEW、RECURRING、SIDE-EFFECT に分類
+4. 実際の TypeScript 変更を実装（パラメータ調整ではない）
+5. ビルド通過を検証
+6. 詳細な変更ログを `~/.vibehq/analytics/optimizations/` に保存
 
 Claude Code と Codex CLI のネイティブ JSONL 形式に対応。
-
-</details>
 
 <details>
 <summary><strong>📱 リモートアクセス</strong></summary>
@@ -257,6 +321,9 @@ vibehq-spawn --name "Jordan" --role "Frontend Engineer" \
 - **Idle 対応キュー** — 忙しい時はキュー、アイドル時にフラッシュ（JSONL watcher + PTY timeout）
 - **状態永続化** — すべてのデータは `~/.vibehq/teams/<team>/hub-state.json` に保存
 - **MCP ネイティブ** — 20 の専用ツール、型安全、自動設定
+- **オーケストレーター強制** — Claude PM は `--disallowedTools`（CLI レベルで Bash/Write/Edit/Read/Glob をハードブロック）；Codex PM は `--sandbox read-only`
+- **コンテンツ検証** — MCP がツールレベルで 0 バイト成果物、スタブパターン、>80% サイズ回帰を拒否
+- **自己改善** — analyze→optimize ループ、クロスラン傾向追跡と自動変更ログ
 
 </details>
 

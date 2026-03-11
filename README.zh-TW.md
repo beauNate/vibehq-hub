@@ -55,17 +55,65 @@ VibeHQ 是一個**協作協議層**，疊在真正的 CLI agent 之上。每個 
 | 沒有品質檢查 | **獨立 QA** — 獨立的 agent 驗證資料正確性 |
 | 沒有事後分析 | **13 條自動偵測規則** — 分析 session log 中的失敗模式 |
 
-### 成果：V1 → V2
+---
 
-| | V1（無協議） | V2（有 VibeHQ） | 變化 |
-|---|---|---|---|
-| Schema 衝突 | 15 | 2 | **-87%** |
-| 協調者手動修 code | 6 | 0 | **消除** |
-| 資料錯誤進入最終產出 | 不明 | 0（QA 攔截 7 個） | **新能力** |
-| 端到端時間 | 107 分鐘 | 58 分鐘 | **-46%** |
-| 最終交付物 | ❌ 損壞 | ✅ 正常運作（62KB） | **修復** |
+## 自我改善的協調機制：從 D 級到 B 級只用 4 次迭代
 
-📊 **[完整基準測試報告 →](benchmarks/vibhq-v1-vs-v2-improvement-report-zh-TW.md)**
+VibeHQ 不只是協調 agent — 它**自動分析失敗原因並寫 code 修復自己。**
+
+我們建了一個自動化迴圈：跑基準測試 → 分析 log → `/optimize-protocol` 讀取分析結果並實作真正的程式碼修改 → 再跑一次並測量差異：
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
+│   基準測試   │────▶│  vibehq-analyze   │────▶│ /optimize-protocol│
+│  （跑團隊）  │     │  --with-llm       │     │  （Claude skill） │
+└─────────────┘     └──────────────────┘     └───────────────────┘
+       ▲                                              │
+       │              寫入真正的程式碼修改              │
+       └──────────────────────────────────────────────┘
+```
+
+### 4 次迭代結果（同一個 4 Agent Todo App 基準測試）
+
+| | v1 | v2 | v3 | v4 |
+|---|---|---|---|---|
+| **等級** | **D** | **C** | **C** | **B** |
+| 耗時 | 47 分鐘 | 13 分鐘 | 10.3 分鐘 | **9.4 分鐘** |
+| 標記（問題） | 13 | 9 | 11 | **7** |
+| 嚴重標記 | 1 | 1 | 2 | **0** |
+| 平行效率 | 0.18 | 0.64 | 0.88 | 0.51 |
+
+**系統在各次迭代中學到並建構的東西：**
+
+| 迭代 | 發現的問題 | 建構的修正 |
+|---|---|---|
+| v1→v2 | Hub 在開機期間誤殺 agent；PM 自己寫 code | 啟動寬限期（180s）；角色 preset 加入工具禁令 |
+| v2→v3 | Codex PM 無視 prompt 約束（shell_command 4→42 次） | `--disallowedTools` CLI 層級強制執行；PM 改用 Claude |
+| v3→v4 | PM 用 Glob 監視 worker；成品被覆寫為 0 byte | 擴充禁用工具清單；MCP 層 0-byte 內容拒絕 |
+
+**核心洞察：** Prompt 約束只是建議。CLI 層級強制執行才是法律。Agent 會適應並繞過軟性限制 — 修復必須是架構層級的。
+
+### 自己試試看
+
+```bash
+# 1. 跑基準測試
+vibehq start --team your-team
+
+# 2. 分析
+vibehq-analyze --team your-team --with-llm --save --run-id v1
+
+# 3. 自動優化（Claude Code skill）
+/optimize-protocol v1
+
+# 4. 再跑一次，比較
+vibehq start --team your-team
+vibehq-analyze --team your-team --with-llm --save --run-id v2
+vibehq-analyze compare v1 v2
+```
+
+所有優化報告都儲存在 `~/.vibehq/analytics/optimizations/` 以供追蹤與稽核。
+
+📖 **[完整部落格文章：自我改善的多 Agent 協調 →](blog-draft-self-improving-agents.md)**
 
 ---
 
@@ -135,21 +183,37 @@ https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
 
 ---
 
-<details>
-<summary><strong>📊 會後分析</strong></summary>
+## 📊 會後分析 & 自動優化
+
+### 分析
 
 ```bash
-vibehq-analyze ./data                    # 分析 session log
-vibehq-analyze ./data --save --with-llm  # 儲存 + LLM 深度分析
-vibehq-analyze history --last 10         # 查看歷史
-vibehq-analyze compare id1 id2           # 比較兩次執行
+vibehq-analyze ./data                        # 分析 session log
+vibehq-analyze --team my-team --with-llm     # 自動解析團隊 log + LLM 洞察
+vibehq-analyze --team my-team --with-llm --save --run-id v1  # 儲存供優化使用
+vibehq-analyze compare v1 v2                 # 兩次執行並排比較
+vibehq-analyze history --last 10             # 查看歷史
 ```
 
-13 條自動偵測規則：成品回退、協調者角色偏移、Stub 檔案、任務超時、未完成任務、高協調開銷、Agent 無回應、零成品產出、Context 膨脹、重複成品、過早接受任務、過度 MCP 輪詢、任務重新分派。
+**13 條自動偵測規則：** 成品回退、協調者角色偏移、Stub 檔案、任務超時、未完成任務、協調開銷、Agent 無回應、零成品產出、Context 膨脹、重複成品、過早接受任務、過度 MCP 輪詢、任務重新分派。
+
+### `/optimize-protocol` — 自我改善 Skill
+
+一個 Claude Code skill，讀取分析資料並**寫入真正的程式碼修正**到框架中：
+
+```bash
+/optimize-protocol v1    # 讀取 v1 的分析資料，實作修正
+```
+
+功能：
+1. 載入當前 run + 所有先前的優化報告
+2. 建構跨 run 趨勢表（哪些在改善、哪些回退、哪些是副作用）
+3. 將每個問題分類為 NEW、RECURRING 或 SIDE-EFFECT
+4. 實作真正的 TypeScript 修改（不是參數調整）
+5. 驗證建置通過
+6. 儲存詳細變更日誌至 `~/.vibehq/analytics/optimizations/`
 
 支援 Claude Code 和 Codex CLI 原生 JSONL 格式。
-
-</details>
 
 <details>
 <summary><strong>📱 遠端存取</strong></summary>
@@ -257,6 +321,9 @@ vibehq-spawn --name "Jordan" --role "Frontend Engineer" \
 - **Idle 感知佇列** — Agent 忙碌時訊息排隊，閒置時刷新（JSONL watcher + PTY timeout）
 - **狀態持久化** — 所有資料存於 `~/.vibehq/teams/<team>/hub-state.json`
 - **MCP 原生** — 20 個專用工具，型別安全，自動配置
+- **協調者強制執行** — Claude PM 使用 `--disallowedTools`（CLI 層級硬性封鎖 Bash/Write/Edit/Read/Glob）；Codex PM 使用 `--sandbox read-only`
+- **內容驗證** — MCP 在工具層拒絕 0-byte 成品、stub 模式、以及 >80% 大小回退
+- **自我改善** — analyze→optimize 迴圈，跨 run 趨勢追蹤與自動變更日誌
 
 </details>
 

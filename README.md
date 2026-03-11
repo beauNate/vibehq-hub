@@ -55,18 +55,6 @@ VibeHQ is a **teamwork protocol layer** that sits on top of real CLI agents. Eac
 | No quality check | **Independent QA** — separate agent validates data against source docs |
 | No post-mortem | **13 automated detection rules** — analyzes session logs for failure patterns |
 
-### Results: V1 → V2
-
-| | V1 (no protocol) | V2 (with VibeHQ) | Change |
-|---|---|---|---|
-| Schema conflicts | 15 | 2 | **-87%** |
-| Manual code fixes by orchestrator | 6 | 0 | **eliminated** |
-| Data errors reaching final output | unknown | 0 (7 caught by QA) | **new capability** |
-| End-to-end time | 107 min | 58 min | **-46%** |
-| Final deliverable | ❌ Broken | ✅ Working (62KB) | **fixed** |
-
-📊 **[Full benchmark report →](benchmarks/vibhq-v1-vs-v2-improvement-report.md)**
-
 ---
 
 ## Self-Improving Coordination: Grade D → B in 4 Iterations
