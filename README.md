@@ -69,6 +69,66 @@ VibeHQ is a **teamwork protocol layer** that sits on top of real CLI agents. Eac
 
 ---
 
+## Self-Improving Coordination: Grade D → B in 4 Iterations
+
+VibeHQ doesn't just coordinate agents — it **analyzes its own failures and writes code to fix them.**
+
+We built an automated loop: run a benchmark → analyze the logs → `/optimize-protocol` reads the analysis and implements real code changes → run again and measure:
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
+│  Benchmark   │────▶│  vibehq-analyze   │────▶│ /optimize-protocol│
+│  (run team)  │     │  --with-llm       │     │   (Claude skill)  │
+└─────────────┘     └──────────────────┘     └───────────────────┘
+       ▲                                              │
+       │              writes real code changes        │
+       └──────────────────────────────────────────────┘
+```
+
+### 4-Iteration Results (same 4-agent Todo App benchmark)
+
+| | v1 | v2 | v3 | v4 |
+|---|---|---|---|---|
+| **Grade** | **D** | **C** | **C** | **B** |
+| Duration | 47 min | 13 min | 10.3 min | **9.4 min** |
+| Flags (issues) | 13 | 9 | 11 | **7** |
+| Critical flags | 1 | 1 | 2 | **0** |
+| Parallel efficiency | 0.18 | 0.64 | 0.88 | 0.51 |
+
+**What the system learned and built across iterations:**
+
+| Iteration | Problem Found | What Was Built |
+|---|---|---|
+| v1→v2 | Hub falsely kills agents during boot; PM writes code | Startup grace period (180s); role presets with tool bans |
+| v2→v3 | Codex PM ignores prompt constraints (shell_command 4→42x) | `--disallowedTools` CLI enforcement; switched PM to Claude |
+| v3→v4 | PM uses Glob to monitor workers; artifacts overwritten to 0 bytes | Expanded disallowed tools; 0-byte content rejection at MCP layer |
+
+**Key insight:** Prompt constraints are suggestions. CLI-level enforcement is law. Agents adapt and route around soft limits — the fix must be architectural.
+
+### Try the loop yourself
+
+```bash
+# 1. Run a benchmark
+vibehq start --team your-team
+
+# 2. Analyze
+vibehq-analyze --team your-team --with-llm --save --run-id v1
+
+# 3. Auto-optimize (Claude Code skill)
+/optimize-protocol v1
+
+# 4. Run again, compare
+vibehq start --team your-team
+vibehq-analyze --team your-team --with-llm --save --run-id v2
+vibehq-analyze compare v1 v2
+```
+
+All optimization reports are saved to `~/.vibehq/analytics/optimizations/` for tracking and auditing.
+
+📖 **[Full blog post: Self-Improving Multi-Agent Coordination →](blog-draft-self-improving-agents.md)**
+
+---
+
 ## 📱 Web Dashboard — Desktop & Mobile
 
 Manage everything from a browser. Start agents on your PC, monitor from your phone.
@@ -135,21 +195,37 @@ https://github.com/user-attachments/assets/fec7634e-976a-4100-8b78-bd63ad1dbec0
 
 ---
 
-<details>
-<summary><strong>📊 Post-Run Analytics</strong></summary>
+## 📊 Post-Run Analytics & Auto-Optimization
+
+### Analyze
 
 ```bash
-vibehq-analyze ./data                    # Analyze session logs
-vibehq-analyze ./data --save --with-llm  # Save + LLM-powered insights
-vibehq-analyze history --last 10         # View past runs
-vibehq-analyze compare id1 id2           # Compare two runs
+vibehq-analyze ./data                        # Analyze session logs
+vibehq-analyze --team my-team --with-llm     # Auto-resolve team logs + LLM insights
+vibehq-analyze --team my-team --with-llm --save --run-id v1  # Save for optimization
+vibehq-analyze compare v1 v2                 # Compare two runs side-by-side
+vibehq-analyze history --last 10             # View past runs
 ```
 
-13 automated detection rules: artifact regression, orchestrator role drift, stub files, task timeout, incomplete tasks, coordination overhead, unresponsive agents, zero artifacts, context bloat, duplicate artifacts, premature task accept, excessive MCP polling, task reassignment.
+**13 automated detection rules:** artifact regression, orchestrator role drift, stub files, task timeout, incomplete tasks, coordination overhead, unresponsive agents, zero artifacts, context bloat, duplicate artifacts, premature task accept, excessive MCP polling, task reassignment.
+
+### `/optimize-protocol` — Self-Improving Skill
+
+A Claude Code skill that reads analysis data and **writes real code fixes** to the framework:
+
+```bash
+/optimize-protocol v1    # Read analysis for run v1, implement fixes
+```
+
+What it does:
+1. Loads current run + all previous optimization reports
+2. Builds cross-run trend table (what's improving, what regressed, what's a side-effect)
+3. Classifies each problem as NEW, RECURRING, or SIDE-EFFECT of a previous fix
+4. Implements real TypeScript changes (not parameter tuning)
+5. Verifies build passes
+6. Saves a detailed changelog to `~/.vibehq/analytics/optimizations/`
 
 Supports both Claude Code and Codex CLI native JSONL log formats.
-
-</details>
 
 <details>
 <summary><strong>📱 Remote Access</strong></summary>
@@ -257,6 +333,9 @@ vibehq-spawn --name "Jordan" --role "Frontend Engineer" \
 - **Idle-aware queue** — messages queue when busy, flush when idle (JSONL watcher + PTY timeout).
 - **State persistence** — all data survives hub restarts (`~/.vibehq/teams/<team>/hub-state.json`).
 - **MCP-native** — 20 purpose-built tools, type-safe, auto-configured per agent.
+- **Orchestrator enforcement** — Claude PMs get `--disallowedTools` (CLI-level hard block on Bash/Write/Edit/Read/Glob); Codex PMs get `--sandbox read-only`.
+- **Content validation** — MCP rejects 0-byte artifacts, stub patterns, and >80% size regressions at the tool level.
+- **Self-improving** — analyze→optimize loop with cross-run trend tracking and automated changelogs.
 
 </details>
 
