@@ -28,6 +28,10 @@ export function formatReport(metrics: RunMetrics, flags: DetectedFlags): string 
   lines.push(fmtRow(w, `  Input:`, `${fmtNum(ts.totalInputTokens)}${pct(ts.totalInputTokens)}`));
   lines.push(fmtRow(w, `  Total:`, fmtNum(ts.totalTokens)));
 
+  // Cost estimate
+  const ce = metrics.costEstimate;
+  lines.push(fmtRow(w, `  Est. Cost:`, `$${ce.totalCostUsd.toFixed(2)} (${ce.model})`));
+
   // Coordination overhead — turn-based (primary) + token-based
   const co = metrics.coordinationOverhead;
   const turnPct = Math.round(co.turnBasedRatio * 100);
@@ -47,6 +51,10 @@ export function formatReport(metrics: RunMetrics, flags: DetectedFlags): string 
     lines.push(fmtRow(w, `  ${a.agentId} ${role}`, `${a.turns} turns, ${fmtNum(a.tokens.outputTokens)} out`));
     lines.push(fmtRow(w, `    Model:`, a.model || 'unknown'));
     lines.push(fmtRow(w, `    Context bloat:`, `${a.contextGrowth.bloatRatio}x`));
+    const util = a.utilization;
+    if (util && util.totalRunTimeSec > 0) {
+      lines.push(fmtRow(w, `    Utilization:`, `${Math.round(util.ratio * 100)}% (${fmtDuration(util.activeTimeSec)} active / ${fmtDuration(util.totalRunTimeSec)})`));
+    }
 
     const topMcp = Object.entries(a.mcpToolCalls)
       .sort((a, b) => b[1] - a[1])
@@ -71,7 +79,7 @@ export function formatReport(metrics: RunMetrics, flags: DetectedFlags): string 
   const taskStats = `Total: ${fmtDuration(tSum.totalTaskTimeSec)}`;
   lines.push(fmtRow(w, ` ${taskHeader}`, taskStats));
   const effPct = Math.round(tSum.parallelEfficiency * 100);
-  lines.push(fmtRow(w, `  Parallel efficiency:`, `${fmtDuration(tSum.totalTaskTimeSec)} / ${fmtDuration(metrics.totalDurationSec)} = ${effPct}%`));
+  lines.push(fmtRow(w, `  Parallel efficiency:`, `${effPct}% avg agent utilization`));
   for (const t of metrics.tasks) {
     const status = t.stateTransitions[t.stateTransitions.length - 1]?.to || '?';
     const statusIcon = status === 'done' ? '✓' : status === 'rejected' ? '✗' : '…';
@@ -120,6 +128,15 @@ export function formatReport(metrics: RunMetrics, flags: DetectedFlags): string 
         ? ` (${a.publishAttempts} attempts, first: ${a.firstAttemptSize}B)`
         : '';
       lines.push(`  ${a.producer} → ${a.filename} (${fmtBytes(a.finalSize)})${stubNote}`);
+    }
+  }
+
+  // Cost breakdown
+  if (metrics.costEstimate.perAgentCost.length > 0) {
+    lines.push('');
+    lines.push(`Cost: $${metrics.costEstimate.totalCostUsd.toFixed(2)} (input: $${metrics.costEstimate.breakdown.inputCost.toFixed(2)}, output: $${metrics.costEstimate.breakdown.outputCost.toFixed(2)}, cache-r: $${metrics.costEstimate.breakdown.cacheReadCost.toFixed(2)}, cache-w: $${metrics.costEstimate.breakdown.cacheWriteCost.toFixed(2)})`);
+    for (const ac of metrics.costEstimate.perAgentCost) {
+      lines.push(`  ${ac.agentId}: $${ac.costUsd.toFixed(2)}`);
     }
   }
 

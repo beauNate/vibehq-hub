@@ -40,6 +40,8 @@ export interface SpawnerOptions {
     dangerouslySkipPermissions?: boolean;
     additionalDirs?: string[];
     cwd?: string;
+    /** Auto-kickstart: inject initial prompt after startup. Only for benchmark/loop mode. */
+    autoKickstart?: boolean;
     /** Web mode: skip stdin/stdout/process.exit, use callbacks instead */
     webMode?: boolean;
     /** PTY output callback (web mode) */
@@ -109,6 +111,36 @@ export class AgentSpawner {
             // Gemini: use PTY output timeout
             this.startPtyIdleTimer();
         }
+
+        // Auto-kickstart: inject initial prompt after CLI finishes loading.
+        // Only enabled when explicitly requested (benchmark loop mode).
+        // Normal team usage should NOT auto-inject — user controls the agents.
+        if (this.options.autoKickstart) {
+            this.autoKickstart();
+        }
+    }
+
+    /**
+     * Auto-inject an initial prompt into the PTY after a startup delay.
+     * Waits for CLI to fully initialize, then sends a role-appropriate
+     * message to kick off the first turn.
+     */
+    private autoKickstart(): void {
+        const KICKSTART_DELAY = 8000; // 8s — enough for Claude Code to load MCP tools
+        const { role, name } = this.options;
+
+        const isOrchestrator = ORCHESTRATOR_ROLES.some(r =>
+            role.toLowerCase().includes(r)
+        );
+
+        const prompt = isOrchestrator
+            ? `You are ${name} (${role}). Your team is connected and ready. Use your MCP coordination tools (list_teammates, create_task, publish_contract, etc.) to begin orchestrating the project. Start now.`
+            : `You are ${name} (${role}). You are part of a team coordinated via MCP tools. Use get_team_updates and list_tasks to check for any assigned tasks, then begin working. If no tasks yet, use get_hub_info to see your team status and wait for assignments.`;
+
+        setTimeout(() => {
+            console.error(`[Spawner] ${name}: auto-kickstart — injecting initial prompt`);
+            this.writeToPty(prompt);
+        }, KICKSTART_DELAY);
     }
 
     /**

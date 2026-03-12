@@ -57,11 +57,11 @@ VibeHQ is a **teamwork protocol layer** that sits on top of real CLI agents. Eac
 
 ---
 
-## Self-Improving Coordination: Grade D → B in 4 Iterations
+## Self-Improving Coordination: The Framework That Debugs Itself
 
-VibeHQ doesn't just coordinate agents — it **analyzes its own failures and writes code to fix them.**
+VibeHQ doesn't just coordinate agents — it **analyzes its own failures and writes code to fix them.** Fully automated, zero human intervention.
 
-We built an automated loop: run a benchmark → analyze the logs → `/optimize-protocol` reads the analysis and implements real code changes → run again and measure:
+We built a closed-loop system: run a benchmark → analyze the logs → `/optimize-protocol` reads the analysis and implements real code changes → rebuild → run again and measure:
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
@@ -73,47 +73,56 @@ We built an automated loop: run a benchmark → analyze the logs → `/optimize-
        └──────────────────────────────────────────────┘
 ```
 
-### 4-Iteration Results (same 4-agent Todo App benchmark)
+### Benchmark Results: Todo App (V1 → V5, 4 agents)
 
-| | v1 | v2 | v3 | v4 |
-|---|---|---|---|---|
-| **Grade** | **D** | **C** | **C** | **B** |
-| Duration | 47 min | 13 min | 10.3 min | **9.4 min** |
-| Flags (issues) | 13 | 9 | 11 | **7** |
-| Critical flags | 1 | 1 | 2 | **0** |
-| Parallel efficiency | 0.18 | 0.64 | 0.88 | 0.51 |
+| Metric | V1 | V2 | V3 | V4 | V5 |
+|--------|----|----|----|----|-----|
+| **Total Tokens** | 7.2M | 3.9M | 14.6M | 15.0M | **5.7M** |
+| **PM Tokens** | 0.3M | 0.2M | 10.1M | 9.8M | **1.8M** |
+| **PM % of Total** | 4% | 5% | 69% | 65% | **32%** |
+| **Turns** | 233 | 164 | 326 | 308 | 216 |
+| **Duration** | 47min | 13min | 10min | 9min | 14min |
+| **Flags (issues)** | 4 | 3 | 5 | 3 | **0** |
+| **Context Bloat (PM)** | 7.07x | 10.56x | 6.62x | 7.04x | **2.84x** |
 
-**What the system learned and built across iterations:**
+### Benchmark Results: Classroom Quiz (fully automated loop)
+
+| Metric | V1 (Before) | V2 (After Loop) | Change |
+|--------|-------------|-----------------|--------|
+| **Total Tokens** | 23.1M | 13.8M | **-40%** |
+| **PM Tokens** | ~15.2M | ~1.3M | **-91%** |
+| **Turns** | 460 | 353 | -23% |
+| **Flags** | 14 | 3 | **-79%** |
+| **STUB_FILE** | 8 | 0 | eliminated |
+| **Context Bloat (PM)** | 7.87x | 2.84x | -64% |
+
+### What the system learned and built
 
 | Iteration | Problem Found | What Was Built |
 |---|---|---|
-| v1→v2 | Hub falsely kills agents during boot; PM writes code | Startup grace period (180s); role presets with tool bans |
-| v2→v3 | Codex PM ignores prompt constraints (shell_command 4→42x) | `--disallowedTools` CLI enforcement; switched PM to Claude |
-| v3→v4 | PM uses Glob to monitor workers; artifacts overwritten to 0 bytes | Expanded disallowed tools; 0-byte content rejection at MCP layer |
+| V1→V2 | Hub falsely kills agents during boot; PM writes code | Startup grace period (180s); role presets with tool bans |
+| V2→V3 | Codex PM ignores prompt constraints (shell_command 4→42x) | `--disallowedTools` CLI enforcement; switched PM to Claude |
+| V3→V4 | PM uses Glob to monitor workers; artifacts overwritten to 0 bytes | Expanded disallowed tools; 0-byte content rejection at MCP layer |
+| V4→V5 | PM polling explodes (28x check_status); stubs pass validation | `McpRateLimiter` (5 calls/60s); `CODE_MIN` enforcement; post-completion quiesce |
+| CQ V1→V2 | 8 stub files; PM 66% of tokens on polling | Same fixes applied automatically — stubs eliminated, tokens -40% |
+
+```
+       23.1M ┤                         * CQ-V1
+             │
+       15.0M ┤               * V3  * V4
+       13.8M ┤                            * CQ-V2
+             │
+        7.2M ┤  * V1
+        5.7M ┤                                  * V5
+        3.9M ┤      * V2
+             │
+           0 ┼──────────────────────────────────────
+             V1   V2   V3   V4  CQ1  CQ2   V5
+```
 
 **Key insight:** Prompt constraints are suggestions. CLI-level enforcement is law. Agents adapt and route around soft limits — the fix must be architectural.
 
-### Try the loop yourself
-
-```bash
-# 1. Run a benchmark
-vibehq start --team your-team
-
-# 2. Analyze
-vibehq-analyze --team your-team --with-llm --save --run-id v1
-
-# 3. Auto-optimize (Claude Code skill)
-/optimize-protocol v1
-
-# 4. Run again, compare
-vibehq start --team your-team
-vibehq-analyze --team your-team --with-llm --save --run-id v2
-vibehq-analyze compare v1 v2
-```
-
-All optimization reports are saved to `~/.vibehq/analytics/optimizations/` for tracking and auditing.
-
-📖 **[Full blog post: Self-Improving Multi-Agent Coordination →](blog-draft-self-improving-agents.md)**
+📖 **[Full blog post: Self-Improving Multi-Agent Coordination →](blog/self-improving-agents.md)**
 
 ---
 
@@ -197,21 +206,95 @@ vibehq-analyze history --last 10             # View past runs
 
 **13 automated detection rules:** artifact regression, orchestrator role drift, stub files, task timeout, incomplete tasks, coordination overhead, unresponsive agents, zero artifacts, context bloat, duplicate artifacts, premature task accept, excessive MCP polling, task reassignment.
 
-### `/optimize-protocol` — Self-Improving Skill
+### Skills: `/optimize-protocol` & `/benchmark-loop`
 
-A Claude Code skill that reads analysis data and **writes real code fixes** to the framework:
+VibeHQ ships two skills that power the self-improving loop. Skills work on both **Claude Code** and **Codex CLI** — same format, different directory.
+
+#### Cross-Platform Skill Locations
+
+| Platform | Project-level | User-level |
+|----------|--------------|------------|
+| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `~/.claude/skills/` |
+| **Codex CLI** | `.agents/skills/<name>/SKILL.md` | `~/.codex/skills/` |
+
+The `SKILL.md` format is an emerging cross-platform standard — same frontmatter (`name`, `description`), same markdown body. A skill created for one platform works on the other.
+
+#### Setup
+
+**Claude Code** — skills are already included in `.claude/skills/`. Just use them:
+
+```bash
+# In Claude Code, type:
+/optimize-protocol v1
+/benchmark-loop
+```
+
+**Codex CLI** — copy the skills to Codex's directory:
+
+```bash
+# Project-level (committed to repo)
+mkdir -p .agents/skills
+cp -r .claude/skills/optimize-protocol .agents/skills/
+cp -r .claude/skills/benchmark-loop .agents/skills/
+
+# Or user-level (available in all projects)
+cp -r .claude/skills/optimize-protocol ~/.codex/skills/
+cp -r .claude/skills/benchmark-loop ~/.codex/skills/
+```
+
+Then in Codex CLI, invoke with `/skills` or type `$` to mention a skill.
+
+#### `/optimize-protocol` — Framework Engineer
+
+Reads analysis data and **writes real code fixes** (not parameter tuning):
 
 ```bash
 /optimize-protocol v1    # Read analysis for run v1, implement fixes
 ```
 
-What it does:
 1. Loads current run + all previous optimization reports
 2. Builds cross-run trend table (what's improving, what regressed, what's a side-effect)
 3. Classifies each problem as NEW, RECURRING, or SIDE-EFFECT of a previous fix
-4. Implements real TypeScript changes (not parameter tuning)
+4. Implements real TypeScript changes to the framework
 5. Verifies build passes
 6. Saves a detailed changelog to `~/.vibehq/analytics/optimizations/`
+
+#### `/benchmark-loop` — Autonomous Runner
+
+Runs the full self-improving cycle automatically:
+
+```bash
+/benchmark-loop "Build a Todo app with REST API, React frontend, and WebSocket real-time updates"
+```
+
+1. Spawns a fresh team with a standardized project
+2. Waits for the team to finish (heartbeat monitoring)
+3. Analyzes session logs (13 rules + LLM grading)
+4. Triggers `/optimize-protocol` to write code fixes
+5. Rebuilds the framework (`npx tsup`)
+6. Repeats with a new team — zero human intervention
+
+#### Manual Step-by-Step (works with any CLI)
+
+The underlying tools are regular CLI commands — **no skills required**:
+
+```bash
+# 1. Run a benchmark
+vibehq start --team your-team
+
+# 2. Analyze
+vibehq-analyze --team your-team --with-llm --save --run-id v1
+
+# 3. Auto-optimize (Claude Code / Codex skill)
+/optimize-protocol v1
+
+# 4. Run again, compare
+vibehq start --team your-team
+vibehq-analyze --team your-team --with-llm --save --run-id v2
+vibehq-analyze compare v1 v2
+```
+
+All optimization reports are saved to `~/.vibehq/analytics/optimizations/` for tracking and auditing.
 
 Supports both Claude Code and Codex CLI native JSONL log formats.
 

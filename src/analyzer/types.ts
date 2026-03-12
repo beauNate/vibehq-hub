@@ -55,13 +55,28 @@ export interface RunMetrics {
 
   taskSummary: {
     totalTaskTimeSec: number;     // sum of all task durations
-    parallelEfficiency: number;   // totalTaskTimeSec / totalDurationSec
+    parallelEfficiency: number;   // avg concurrent active agents / total agents
+  };
+
+  costEstimate: {
+    totalCostUsd: number;
+    breakdown: {
+      inputCost: number;
+      outputCost: number;
+      cacheReadCost: number;
+      cacheWriteCost: number;
+    };
+    perAgentCost: { agentId: string; costUsd: number }[];
+    model: string;  // model used for pricing
   };
 
   agents: AgentMetrics[];
   tasks: TaskMetrics[];
   artifacts: ArtifactMetrics[];
   phases: PhaseMetrics[];
+
+  /** Shared files on disk (from hub team state directory) — used to cross-reference artifact sizes */
+  sharedFiles?: { filename: string; sizeBytes: number; producer?: string }[];
 }
 
 export interface AgentMetrics {
@@ -84,6 +99,13 @@ export interface AgentMetrics {
   mcpToolCalls: Record<string, number>;   // only vibehq MCP tools
   nativeToolCalls: Record<string, number>; // Write, Edit, Bash, etc.
   implementationToolUsed: boolean;
+
+  /** Agent utilization: fraction of total run time the agent was actively working */
+  utilization: {
+    activeTimeSec: number;      // seconds with events (within activity windows)
+    totalRunTimeSec: number;    // wall clock from agent's first to last event
+    ratio: number;              // activeTimeSec / totalRunTimeSec
+  };
 }
 
 export interface TaskMetrics {

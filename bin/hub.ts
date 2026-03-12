@@ -4,10 +4,11 @@
 
 import { startHub } from '../src/hub/server.js';
 
-function parseArgs(): { port: number; verbose: boolean } {
+function parseArgs(): { port: number; verbose: boolean; team: string } {
     const args = process.argv.slice(2);
     let port = 3001;
     let verbose = false;
+    let team = 'default';
 
     for (let i = 0; i < args.length; i++) {
         switch (args[i]) {
@@ -18,6 +19,10 @@ function parseArgs(): { port: number; verbose: boolean } {
                     console.error('Error: --port requires a number');
                     process.exit(1);
                 }
+                break;
+            case '-t':
+            case '--team':
+                team = args[++i];
                 break;
             case '-v':
             case '--verbose':
@@ -32,6 +37,7 @@ Start the Agent Hub central server
 
 Options:
   -p, --port <number>    Port number (default: 3001)
+  -t, --team <name>      Team name (default: default)
   -v, --verbose          Enable verbose logging
   -h, --help             Show help
 `);
@@ -39,11 +45,11 @@ Options:
         }
     }
 
-    return { port, verbose };
+    return { port, verbose, team };
 }
 
-const { port, verbose } = parseArgs();
-const hub = startHub({ port, verbose });
+const { port, verbose, team } = parseArgs();
+const hub = startHub({ port, verbose, team });
 
 // Graceful shutdown
 process.on('SIGINT', () => {

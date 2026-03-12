@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container {
+    width: 1200px;
+    background: #161b22;
+    border-radius: 16px;
+    padding: 40px;
+    border: 1px solid #30363d;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #f0f6fc;
+    margin-bottom: 6px;
+  }
+  .header p {
+    font-size: 15px;
+    color: #8b949e;
+  }
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-top: 24px;
+  }
+  .chart-box {
+    background: #0d1117;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid #30363d;
+  }
+  .chart-box h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #8b949e;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .bottom-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #30363d;
+  }
+  .stat-group {
+    display: flex;
+    gap: 40px;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #58a6ff;
+  }
+  .stat .value.green { color: #3fb950; }
+  .stat .value.purple { color: #bc8cff; }
+  .stat .label {
+    font-size: 12px;
+    color: #8b949e;
+    margin-top: 2px;
+  }
+  .credit {
+    font-size: 13px;
+    color: #484f58;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Self-Improving Multi-Agent Coordination</h1>
+    <p>Inspired by @karpathy's autoresearch — applied to multi-agent teamwork protocol</p>
+  </div>
+
+  <div class="charts">
+    <div class="chart-box">
+      <h2>Token Usage (lower = more efficient)</h2>
+      <canvas id="tokenChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h2>Issues Detected (lower = better coordination)</h2>
+      <canvas id="flagChart"></canvas>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="stat-group">
+      <div class="stat">
+        <div class="value green">-62%</div>
+        <div class="label">Token Reduction<br>(V4 → V5)</div>
+      </div>
+      <div class="stat">
+        <div class="value green">0</div>
+        <div class="label">Issues in V5<br>(was 4 in V1)</div>
+      </div>
+      <div class="stat">
+        <div class="value purple">-91%</div>
+        <div class="label">PM Token Waste<br>(CQ V1 → V2)</div>
+      </div>
+      <div class="stat">
+        <div class="value">7</div>
+        <div class="label">Iterations<br>Zero Human Fixes</div>
+      </div>
+    </div>
+    <div class="credit">github.com/0x0funky/vibehq</div>
+  </div>
+</div>
+
+<script>
+const labels = ['V1', 'V2', 'V3', 'V4', 'CQ-V1', 'CQ-V2', 'V5'];
+
+// --- Token Chart ---
+const tokenCtx = document.getElementById('tokenChart').getContext('2d');
+const totalTokens = [7.2, 3.9, 14.6, 15.0, 23.1, 13.8, 5.7];
+const pmTokens =    [0.3, 0.2, 10.1, 9.8, 15.2, 1.3, 1.8];
+
+new Chart(tokenCtx, {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Worker Tokens',
+        data: totalTokens.map((t, i) => +(t - pmTokens[i]).toFixed(1)),
+        backgroundColor: '#1f6feb',
+        borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+        borderSkipped: 'top',
+      },
+      {
+        label: 'PM/Orchestrator Tokens',
+        data: pmTokens,
+        backgroundColor: '#f85149',
+        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        borderSkipped: 'bottom',
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 1.4,
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#21262d' },
+        ticks: { color: '#8b949e', font: { size: 13, weight: '600' } },
+      },
+      y: {
+        stacked: true,
+        grid: { color: '#21262d' },
+        ticks: {
+          color: '#8b949e',
+          callback: v => v + 'M',
+          font: { size: 12 },
+        },
+        title: {
+          display: true,
+          text: 'Tokens (millions)',
+          color: '#8b949e',
+          font: { size: 12 },
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        labels: { color: '#8b949e', usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12 } },
+      },
+      tooltip: {
+        callbacks: {
+          label: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + 'M',
+        },
+      },
+    },
+  },
+});
+
+// --- Flags Chart ---
+const flagCtx = document.getElementById('flagChart').getContext('2d');
+const flags =     [4, 3, 5, 3, 14, 3, 0];
+const criticals = [0, 0, 1, 0,  1, 0, 0];
+
+new Chart(flagCtx, {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Non-Critical Issues',
+        data: flags.map((f, i) => f - criticals[i]),
+        backgroundColor: '#d29922',
+        borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+        borderSkipped: 'top',
+      },
+      {
+        label: 'Critical Issues',
+        data: criticals,
+        backgroundColor: '#f85149',
+        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        borderSkipped: 'bottom',
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    aspectRatio: 1.4,
+    scales: {
+      x: {
+        stacked: true,
+        grid: { color: '#21262d' },
+        ticks: { color: '#8b949e', font: { size: 13, weight: '600' } },
+      },
+      y: {
+        stacked: true,
+        grid: { color: '#21262d' },
+        ticks: { color: '#8b949e', stepSize: 2, font: { size: 12 } },
+        title: {
+          display: true,
+          text: 'Detected Issues',
+          color: '#8b949e',
+          font: { size: 12 },
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        labels: { color: '#8b949e', usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12 } },
+      },
+    },
+  },
+});
+</script>
+</body>
+</html>

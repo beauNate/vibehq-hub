@@ -22,3 +22,10 @@ codex.md
 Alan
 需要修正的問題.md
 VibHQ Post-Run Analysis System.md
+
+# Chart reference images (downloaded, not ours)
+chart/*.png
+chart/*.jpg
+
+# Web build output
+web-dist/

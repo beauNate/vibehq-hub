@@ -220,14 +220,33 @@ if (firstArgIsFlag && teamNameArg) {
     events.push(...parseLogFile(r.path));
   }
 } else {
-  // Path mode: analyze a specific directory or file
-  const inputPath = resolve(args[0]);
-  if (!existsSync(inputPath)) {
-    console.error(`Error: path not found: ${inputPath}`);
+  // Path mode: analyze specific files or a directory
+  // Collect all non-flag positional args as input paths
+  const inputPaths: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('-')) {
+      // Skip flags and their values
+      if (['--run-id', '--api-key', '--model', '--provider', '--team', '--last'].includes(args[i])) i++;
+      continue;
+    }
+    inputPaths.push(resolve(args[i]));
+  }
+
+  if (inputPaths.length === 0) {
+    console.error('Error: no input path provided');
     process.exit(1);
   }
-  const isDir = statSync(inputPath).isDirectory();
-  events = isDir ? parseLogDirectory(inputPath) : parseLogFile(inputPath);
+
+  for (const inputPath of inputPaths) {
+    if (!existsSync(inputPath)) {
+      console.error(`Warning: path not found, skipping: ${inputPath}`);
+      continue;
+    }
+    const isDir = statSync(inputPath).isDirectory();
+    const parsed = isDir ? parseLogDirectory(inputPath) : parseLogFile(inputPath);
+    events.push(...parsed);
+    resolvedLogPaths.push(inputPath);
+  }
 }
 
 if (events.length === 0) {
@@ -238,6 +257,22 @@ if (events.length === 0) {
 // Stage 1: Extract metrics
 const customRunId = getArg('--run-id');
 const metrics = extractMetrics(events, customRunId);
+
+// Cross-reference shared files from hub team state directory
+if (teamNameArg) {
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+  const sharedDir = join(homeDir, '.vibehq', 'teams', teamNameArg, 'shared');
+  if (existsSync(sharedDir) && statSync(sharedDir).isDirectory()) {
+    const sharedFiles: { filename: string; sizeBytes: number }[] = [];
+    for (const f of readdirSync(sharedDir)) {
+      const fullPath = join(sharedDir, f);
+      if (statSync(fullPath).isFile()) {
+        sharedFiles.push({ filename: f, sizeBytes: statSync(fullPath).size });
+      }
+    }
+    metrics.sharedFiles = sharedFiles;
+  }
+}
 
 // Stage 2: Detect patterns
 const flags = detectPatterns(metrics);
@@ -300,7 +335,7 @@ if (hasFlag('--json')) {
 // Stage 4: Save to history
 if (hasFlag('--save')) {
   let rawLogPaths: string[];
-  if (isTeamMode) {
+  if (resolvedLogPaths.length > 0) {
     rawLogPaths = resolvedLogPaths;
   } else {
     const inputPath = resolve(args[0]);

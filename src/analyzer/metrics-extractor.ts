@@ -69,14 +69,16 @@ export function extractMetrics(events: NormalizedEvent[], runId?: string): RunMe
       : 0,
   };
 
-  // Task summary
+  // Task summary — parallel efficiency based on concurrent agent activity
   const totalTaskTimeSec = tasks.reduce((s, t) => s + t.totalDurationSec, 0);
+  const parallelEfficiency = computeParallelEfficiency(realEvents, agentIds, totalDurationSec);
   const taskSummary = {
     totalTaskTimeSec,
-    parallelEfficiency: totalDurationSec > 0
-      ? Math.round((totalTaskTimeSec / totalDurationSec) * 100) / 100
-      : 0,
+    parallelEfficiency,
   };
+
+  // Cost estimate
+  const costEstimate = computeCostEstimate(agents);
 
   return {
     runId: runId || deriveRunId(startTime),
@@ -90,6 +92,7 @@ export function extractMetrics(events: NormalizedEvent[], runId?: string): RunMe
     tokenSummary,
     coordinationOverhead,
     taskSummary,
+    costEstimate,
     agents,
     tasks,
     artifacts,
@@ -226,6 +229,9 @@ function buildAgentMetrics(
     return IMPL_TOOLS.has(name);
   });
 
+  // Agent utilization — measure active time vs total time
+  const utilization = computeAgentUtilization(agentEvents);
+
   return {
     agentId,
     agentRole: role,
@@ -241,6 +247,7 @@ function buildAgentMetrics(
     mcpToolCalls,
     nativeToolCalls,
     implementationToolUsed,
+    utilization,
   };
 }
 
@@ -500,6 +507,159 @@ function detectPhases(events: NormalizedEvent[], tasks: TaskMetrics[]): PhaseMet
     end,
     durationSec: calcDuration(start, end),
   })).sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/**
+ * Agent utilization: group events into activity windows (gaps > 30s = idle),
+ * sum active window durations / total span.
+ */
+function computeAgentUtilization(agentEvents: NormalizedEvent[]): {
+  activeTimeSec: number; totalRunTimeSec: number; ratio: number;
+} {
+  const timestamps = agentEvents
+    .map(e => e.timestamp)
+    .filter(Boolean)
+    .map(t => new Date(t).getTime())
+    .sort((a, b) => a - b);
+
+  if (timestamps.length < 2) {
+    return { activeTimeSec: 0, totalRunTimeSec: 0, ratio: 0 };
+  }
+
+  const totalRunTimeSec = Math.round((timestamps[timestamps.length - 1] - timestamps[0]) / 1000);
+  const IDLE_GAP_MS = 30_000; // 30s gap = idle
+  let activeMs = 0;
+  let windowStart = timestamps[0];
+
+  for (let i = 1; i < timestamps.length; i++) {
+    const gap = timestamps[i] - timestamps[i - 1];
+    if (gap > IDLE_GAP_MS) {
+      // Close current window
+      activeMs += timestamps[i - 1] - windowStart;
+      windowStart = timestamps[i];
+    }
+  }
+  // Close final window
+  activeMs += timestamps[timestamps.length - 1] - windowStart;
+
+  const activeTimeSec = Math.round(activeMs / 1000);
+  return {
+    activeTimeSec,
+    totalRunTimeSec,
+    ratio: totalRunTimeSec > 0 ? Math.round((activeTimeSec / totalRunTimeSec) * 100) / 100 : 0,
+  };
+}
+
+/**
+ * Parallel efficiency: sample the timeline at 1s intervals, count how many
+ * agents are active in each slot, then average / total agents.
+ * "Active" = agent had an event within ±15s of that time slot.
+ */
+function computeParallelEfficiency(
+  events: NormalizedEvent[],
+  agentIds: string[],
+  totalDurationSec: number,
+): number {
+  if (totalDurationSec === 0 || agentIds.length <= 1) return 1;
+
+  // Build per-agent timestamp arrays
+  const agentTimestamps = new Map<string, number[]>();
+  for (const id of agentIds) agentTimestamps.set(id, []);
+  for (const e of events) {
+    if (!e.timestamp || !e.agentId) continue;
+    agentTimestamps.get(e.agentId)?.push(new Date(e.timestamp).getTime());
+  }
+  // Sort each
+  for (const ts of agentTimestamps.values()) ts.sort((a, b) => a - b);
+
+  const allTs = events.map(e => e.timestamp).filter(Boolean).map(t => new Date(t).getTime());
+  const runStart = Math.min(...allTs);
+  const runEnd = Math.max(...allTs);
+
+  const WINDOW_MS = 15_000; // agent counts as "active" if event within 15s
+  const STEP_MS = 5_000;    // sample every 5s for performance
+  let totalSlots = 0;
+  let totalActive = 0;
+
+  for (let t = runStart; t <= runEnd; t += STEP_MS) {
+    totalSlots++;
+    for (const [, ts] of agentTimestamps) {
+      // Binary search for nearest event
+      let lo = 0, hi = ts.length - 1;
+      let minDist = Infinity;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const dist = Math.abs(ts[mid] - t);
+        if (dist < minDist) minDist = dist;
+        if (ts[mid] < t) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      if (minDist <= WINDOW_MS) totalActive++;
+    }
+  }
+
+  return totalSlots > 0
+    ? Math.round((totalActive / (totalSlots * agentIds.length)) * 100) / 100
+    : 0;
+}
+
+// ─── Cost estimation ───
+// Pricing per 1M tokens (USD) — Claude Opus 4.6 / Sonnet 4.6 / Haiku 4.5
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  'claude-opus-4-6':    { input: 15,  output: 75,  cacheRead: 1.5,   cacheWrite: 18.75 },
+  'claude-sonnet-4-6':  { input: 3,   output: 15,  cacheRead: 0.3,   cacheWrite: 3.75  },
+  'claude-haiku-4-5':   { input: 0.8, output: 4,   cacheRead: 0.08,  cacheWrite: 1     },
+  // Fallback
+  'default':            { input: 15,  output: 75,  cacheRead: 1.5,   cacheWrite: 18.75 },
+};
+
+function computeCostEstimate(agents: AgentMetrics[]): RunMetrics['costEstimate'] {
+  // Detect model from agents (use most common)
+  const modelCounts = new Map<string, number>();
+  for (const a of agents) {
+    const m = a.model || 'default';
+    modelCounts.set(m, (modelCounts.get(m) || 0) + 1);
+  }
+  const detectedModel = [...modelCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'default';
+
+  // Match pricing — try exact match, then prefix match
+  const pricing = MODEL_PRICING[detectedModel]
+    || Object.entries(MODEL_PRICING).find(([k]) => detectedModel.startsWith(k.replace(/-\d+$/, '')))?.[1]
+    || MODEL_PRICING['default'];
+
+  const perM = 1_000_000;
+  let inputCost = 0, outputCost = 0, cacheReadCost = 0, cacheWriteCost = 0;
+  const perAgentCost: { agentId: string; costUsd: number }[] = [];
+
+  for (const a of agents) {
+    const ic = (a.tokens.inputTokens / perM) * pricing.input;
+    const oc = (a.tokens.outputTokens / perM) * pricing.output;
+    const crc = (a.tokens.cacheReadTokens / perM) * pricing.cacheRead;
+    const cwc = (a.tokens.cacheWriteTokens / perM) * pricing.cacheWrite;
+    inputCost += ic;
+    outputCost += oc;
+    cacheReadCost += crc;
+    cacheWriteCost += cwc;
+    perAgentCost.push({
+      agentId: a.agentId,
+      costUsd: Math.round((ic + oc + crc + cwc) * 10000) / 10000,
+    });
+  }
+
+  const totalCostUsd = Math.round((inputCost + outputCost + cacheReadCost + cacheWriteCost) * 10000) / 10000;
+
+  return {
+    totalCostUsd,
+    breakdown: {
+      inputCost: Math.round(inputCost * 10000) / 10000,
+      outputCost: Math.round(outputCost * 10000) / 10000,
+      cacheReadCost: Math.round(cacheReadCost * 10000) / 10000,
+      cacheWriteCost: Math.round(cacheWriteCost * 10000) / 10000,
+    },
+    perAgentCost,
+    model: detectedModel,
+  };
 }
 
 function calcDuration(start: string, end: string): number {

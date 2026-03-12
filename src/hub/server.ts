@@ -116,7 +116,7 @@ export function startHub(options: HubOptions): HubContext {
     }
 
     // Load persisted state — merge all teams so web platform can see everything
-    const saved = loadAllTeamsState();
+    const saved = loadTeamState(stateDir);
 
     // --- Stores ---
     const teamUpdates: Map<string, TeamUpdate[]> = new Map(Object.entries(saved.teamUpdates));
@@ -183,7 +183,7 @@ export function startHub(options: HubOptions): HubContext {
 
     // --- Heartbeat / Liveness Monitor ---
     const HEARTBEAT_INTERVAL = 30_000;   // Check every 30 seconds
-    const HEARTBEAT_TIMEOUT = 120_000;   // 120 seconds without activity = offline (agents need time for startup + long spec writes)
+    const HEARTBEAT_TIMEOUT = 480_000;   // 8 minutes without activity = offline (agents need time for long spec writes / builds)
     const STARTUP_GRACE_MS = 180_000;    // 3 min grace period after hub start — agents are booting
     const hubStartTime = Date.now();
     const offlineNotified = new Set<string>(); // Track already-notified agents
@@ -656,6 +656,24 @@ export function startHub(options: HubOptions): HubContext {
                         });
 
                         if (verbose) console.log(`[Hub] Task ${queuedTask.taskId}: UNBLOCKED → ${queuedTask.assignee}`);
+                    }
+
+                    // --- Post-completion quiesce: check if ALL agent's tasks are done ---
+                    const agentTasks = [...taskStore.values()].filter(
+                        t => t.assignee.toLowerCase() === agent.name.toLowerCase()
+                    );
+                    const allDone = agentTasks.length > 0 && agentTasks.every(
+                        t => t.status === 'done' || t.status === 'rejected'
+                    );
+                    if (allDone) {
+                        // Tell the agent all their work is done — stop polling, enter idle mode
+                        queueOrDeliver(agent.name, agent.team, {
+                            type: 'relay:reply:delivered',
+                            fromAgent: 'Hub',
+                            message: `✅ ALL TASKS COMPLETE — All ${agentTasks.length} task(s) assigned to you are done. ` +
+                                `You may stop working. Do NOT poll for more tasks — the hub will notify you if new work arrives.`,
+                        });
+                        if (verbose) console.log(`[Hub] Agent ${agent.name}: all ${agentTasks.length} tasks complete — quiesce signal sent`);
                     }
 
                     if (verbose) console.log(`[Hub] Task ${msg.taskId}: completed by ${agent.name}, artifact: ${msg.artifact}`);

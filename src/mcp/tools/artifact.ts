@@ -8,6 +8,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { HubClient } from '../hub-client.js';
+import type { McpRateLimiter } from '../rate-limiter.js';
 
 function getSharedDir(team: string): string {
     const dir = join(homedir(), '.vibehq', 'teams', team, 'shared');
@@ -50,9 +51,22 @@ function validateContent(filename: string, content: string, previousSize?: numbe
         };
     }
 
-    // Check minimum size for known file types
+    // Hard minimum size enforcement for code files (no stub pattern match needed)
+    const CODE_MIN: Record<string, number> = {
+        js: 500, ts: 500, jsx: 500, tsx: 500,
+        css: 300, html: 500, py: 400,
+    };
+    const codeMin = CODE_MIN[ext];
+    if (codeMin && size < codeMin) {
+        return {
+            valid: false,
+            reason: `Code file too small: "${filename}" is ${size} bytes (minimum ${codeMin} for .${ext} files). ` +
+                `This looks like a skeleton/placeholder. Write the COMPLETE implementation, then publish again.`,
+        };
+    }
+
+    // Check minimum size for known file types (stub pattern check for non-code)
     if (minSize && size < minSize && size > 0) {
-        // Check if content matches stub patterns
         const isStub = STUB_PATTERNS.some(p => p.test(content.trim()));
         if (isStub) {
             return {
@@ -162,21 +176,38 @@ export function registerPublishArtifact(server: McpServer, hub: HubClient, team:
     );
 }
 
-export function registerListArtifacts(server: McpServer, hub: HubClient): void {
+export function registerListArtifacts(server: McpServer, hub: HubClient, rateLimiter?: McpRateLimiter): void {
     server.tool(
         'list_artifacts',
-        'List all published artifacts with their metadata (type, summary, owner, last updated). Optionally filter by type.',
+        'List all published artifacts with their metadata (type, summary, owner, last updated). Hub sends proactive artifact notifications — avoid calling this repeatedly.',
         {
             artifact_type: z.enum(['spec', 'plan', 'report', 'decision', 'code', 'other']).optional()
                 .describe('Optional: filter by artifact type'),
         },
         async (args) => {
+            // Rate limit check
+            if (rateLimiter) {
+                const cacheKey = `list_artifacts:${args.artifact_type || 'all'}`;
+                const check = rateLimiter.check(cacheKey);
+                if (check.limited && check.cachedResponse) {
+                    const { McpRateLimiter: RL } = await import('../rate-limiter.js');
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: RL.buildWarning('list_artifacts', check.callCount) + '\n' + check.cachedResponse,
+                        }],
+                    };
+                }
+            }
+
             try {
                 const artifacts = await hub.listArtifacts(args.artifact_type);
+                const responseText = JSON.stringify({ artifacts }, null, 2);
+                rateLimiter?.recordResponse(`list_artifacts:${args.artifact_type || 'all'}`, responseText);
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: JSON.stringify({ artifacts }, null, 2),
+                        text: responseText,
                     }],
                 };
             } catch (err) {

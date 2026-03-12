@@ -30,7 +30,11 @@ Key tunable files and parameters:
 - src/analyzer/metrics-extractor.ts: ghost agent filtering — agents with empty agentId are excluded from metrics
 - src/hub/server.ts: auto-reassign — heartbeat handler reassigns tasks from unresponsive agents to idle workers
 - src/mcp/tools/task-lifecycle.ts: reassign_task — manual task reassignment MCP tool
-- src/hub/server.ts: proactive notifications — hub notifies creator on task accept/reject, in_progress, blocked, and completion (reduces polling need)`;
+- src/hub/server.ts: proactive notifications — hub notifies creator on task accept/reject, in_progress, blocked, and completion (reduces polling need)
+- src/mcp/rate-limiter.ts: McpRateLimiter — rate limits polling tools (check_status, list_tasks, get_team_updates, list_shared_files, list_artifacts). After 5 calls in 60s window, returns cached response + warning. Prevents context bloat from repeated identical queries.
+- src/hub/server.ts: post-completion quiesce — when ALL tasks assigned to an agent are done/rejected, hub sends ALL_TASKS_COMPLETE message telling agent to stop working and stop polling
+- src/mcp/tools/share-file.ts: CODE_MIN enforcement — code files (.js/.ts/.jsx/.tsx) must be >=500 bytes, .css >=300B, .html >=500B, .py >=400B. Rejects undersized code files regardless of stub pattern match.
+- src/analyzer/pattern-detector.ts: DUPLICATE_SHARED_FILE rule — detects when same agent publishes near-duplicate files under different names (e.g., backend/server.js and backend-server.js)`;
 
 interface FrameworkContext {
   heartbeat_timeout_ms: number;
@@ -47,7 +51,7 @@ interface FrameworkContext {
 
 export function collectFrameworkContext(teamConfig?: Record<string, unknown>): FrameworkContext {
   return {
-    heartbeat_timeout_ms: 120_000,
+    heartbeat_timeout_ms: 480_000,
     pty_idle_timeout_ms: 10_000,
     jsonl_idle_fallback_ms: 30_000,
     ask_timeout_ms: 120_000,

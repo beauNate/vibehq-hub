@@ -8,6 +8,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { HubClient } from '../hub-client.js';
+import type { McpRateLimiter } from '../rate-limiter.js';
 
 function getSharedDir(team: string): string {
     const dir = join(homedir(), '.vibehq', 'teams', team, 'shared');
@@ -67,7 +68,25 @@ export function registerShareFile(server: McpServer, team: string, hub: HubClien
                     }
                 }
 
-                // Stub pattern check for small files
+                // Hard minimum size enforcement for code files (no stub pattern match needed)
+                // A 311-byte server.js or 196-byte db.js is never a valid final deliverable
+                const CODE_MIN: Record<string, number> = {
+                    js: 500, ts: 500, jsx: 500, tsx: 500,
+                    css: 300, html: 500, py: 400,
+                };
+                const codeMin = CODE_MIN[ext];
+                if (codeMin && contentSize < codeMin) {
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: `❌ Code file too small: "${filename}" is ${contentSize} bytes (minimum ${codeMin} for .${ext} files). ` +
+                                `This looks like a skeleton/placeholder. Write the COMPLETE implementation, then share again.`,
+                        }],
+                        isError: true,
+                    };
+                }
+
+                // Stub pattern check for small non-code files
                 if (minSize && contentSize < minSize && contentSize > 0) {
                     const STUB_RX = [
                         /^<html>\s*<body>\s*(TODO|placeholder)/i,
@@ -151,12 +170,26 @@ export function registerReadSharedFile(server: McpServer, team: string): void {
     );
 }
 
-export function registerListSharedFiles(server: McpServer, team: string): void {
+export function registerListSharedFiles(server: McpServer, team: string, rateLimiter?: McpRateLimiter): void {
     server.tool(
         'list_shared_files',
-        'List all files in the team shared folder.',
+        'List all files in the team shared folder. Call this once at the start, then rely on hub notifications for changes.',
         {},
         async () => {
+            // Rate limit check
+            if (rateLimiter) {
+                const check = rateLimiter.check('list_shared_files');
+                if (check.limited && check.cachedResponse) {
+                    const { McpRateLimiter: RL } = await import('../rate-limiter.js');
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: RL.buildWarning('list_shared_files', check.callCount) + '\n' + check.cachedResponse,
+                        }],
+                    };
+                }
+            }
+
             try {
                 const dir = getSharedDir(team);
                 const files = readdirSync(dir).map(name => {
@@ -167,10 +200,12 @@ export function registerListSharedFiles(server: McpServer, team: string): void {
                         modified: stat.mtime.toISOString(),
                     };
                 });
+                const responseText = JSON.stringify({ team, files }, null, 2);
+                rateLimiter?.recordResponse('list_shared_files', responseText);
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: JSON.stringify({ team, files }, null, 2),
+                        text: responseText,
                     }],
                 };
             } catch (err) {

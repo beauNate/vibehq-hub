@@ -226,25 +226,49 @@ const RULES: DetectionRule[] = [
     ruleId: 'ARTIFACT_REGRESSION',
     severity: 'critical',
     description: 'Agent artifact size decreased significantly between attempts (content regression)',
-    detect: (m) => m.artifacts
-      .filter(a => a.publishAttempts > 1 && a.firstAttemptSize > 300 && a.finalSize < a.firstAttemptSize * 0.1)
-      .map(a => ({
-        agent: a.producer,
-        artifact: a.filename,
-        firstAttemptBytes: a.firstAttemptSize,
-        finalBytes: a.finalSize,
-        attempts: a.publishAttempts,
-        regressionRatio: Math.round((a.finalSize / a.firstAttemptSize) * 1000) / 1000,
-      })),
+    detect: (m) => {
+      // Build shared files lookup for cross-reference
+      const sharedMap = new Map<string, number>();
+      for (const sf of m.sharedFiles || []) {
+        sharedMap.set(sf.filename.toLowerCase(), sf.sizeBytes);
+      }
+      return m.artifacts
+        .filter(a => {
+          if (a.publishAttempts <= 1 || a.firstAttemptSize <= 300) return false;
+          if (a.finalSize >= a.firstAttemptSize * 0.1) return false;
+          // Cross-reference: if shared file exists with real content, not a true regression
+          const sharedSize = sharedMap.get(a.filename.toLowerCase());
+          if (sharedSize && sharedSize >= a.firstAttemptSize * 0.5) return false;
+          return true;
+        })
+        .map(a => ({
+          agent: a.producer,
+          artifact: a.filename,
+          firstAttemptBytes: a.firstAttemptSize,
+          finalBytes: a.finalSize,
+          attempts: a.publishAttempts,
+          regressionRatio: Math.round((a.finalSize / a.firstAttemptSize) * 1000) / 1000,
+        }));
+    },
   },
 
   // ─── Quality Issues ───
   {
     ruleId: 'NO_ARTIFACTS_PRODUCED',
     severity: 'high',
-    description: 'Worker agent produced zero artifacts',
+    description: 'Worker agent produced nothing (no artifacts, no shared files, no files written to disk)',
     detect: (m) => {
       const producerSet = new Set(m.artifacts.map(a => a.producer));
+      for (const agent of m.agents) {
+        // Agent shared files via MCP
+        if ((agent.mcpToolCalls['share_file'] || 0) > 0) {
+          producerSet.add(agent.agentId);
+        }
+        // Agent wrote files to disk directly
+        if ((agent.nativeToolCalls['Write'] || 0) > 0) {
+          producerSet.add(agent.agentId);
+        }
+      }
       return m.agents
         .filter(a => a.agentRole === 'worker' && !producerSet.has(a.agentId))
         .map(a => ({ agent: a.agentId, turns: a.turns }));
@@ -267,6 +291,44 @@ const RULES: DetectionRule[] = [
         listTasks: a.mcpToolCalls['list_tasks'] || 0,
         listTeammates: a.mcpToolCalls['list_teammates'] || 0,
       })),
+  },
+  {
+    ruleId: 'DUPLICATE_SHARED_FILE',
+    severity: 'medium',
+    description: 'Same agent published near-duplicate files under different names (e.g., backend/server.js and backend-server.js)',
+    detect: (m) => {
+      const results: Record<string, unknown>[] = [];
+      // Group artifacts by producer
+      const byProducer = new Map<string, typeof m.artifacts>();
+      for (const a of m.artifacts) {
+        const list = byProducer.get(a.producer) || [];
+        list.push(a);
+        byProducer.set(a.producer, list);
+      }
+      for (const [producer, arts] of byProducer) {
+        // Normalize filenames: replace path separators with - and compare
+        const normalized = arts.map(a => ({
+          original: a.filename,
+          normalized: a.filename.replace(/[\/\\]/g, '-').toLowerCase(),
+          size: a.finalSize,
+        }));
+        // Find pairs with same normalized name
+        for (let i = 0; i < normalized.length; i++) {
+          for (let j = i + 1; j < normalized.length; j++) {
+            if (normalized[i].normalized === normalized[j].normalized) {
+              results.push({
+                agent: producer,
+                file1: normalized[i].original,
+                file2: normalized[j].original,
+                size1: normalized[i].size,
+                size2: normalized[j].size,
+              });
+            }
+          }
+        }
+      }
+      return results;
+    },
   },
 ];
 

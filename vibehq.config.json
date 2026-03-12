@@ -1,357 +1,38 @@
 {
     "teams": [
         {
-            "name": "dexlessai",
+            "name": "my-project",
             "hub": {
                 "port": 3001
             },
             "agents": [
                 {
-                    "name": "Alex",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\dexless-aicompany\\Dexless_backend-main"
-                },
-                {
-                    "name": "Jordan",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\dexless-aicompany\\Dexless_front-main"
-                },
-                {
-                    "name": "Bob",
-                    "role": "AI Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\dexless-aicompany\\DexlessAI"
-                },
-                {
-                    "name": "Alice",
-                    "role": "Product Manager",
-                    "cli": "claude",
-                    "cwd": "D:\\dexless-aicompany"
-                }
-            ]
-        },
-        {
-            "name": "medvault",
-            "hub": {
-                "port": 3002
-            },
-            "agents": [
-                {
-                    "name": "Alex",
+                    "name": "Emma",
                     "role": "Project Manager",
-                    "cli": "codex",
-                    "cwd": "D:\\medvault"
+                    "cli": "claude",
+                    "cwd": "/path/to/project"
                 },
                 {
                     "name": "Sam",
                     "role": "Product Designer",
                     "cli": "claude",
-                    "cwd": "D:\\medvault\\design",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Jordan",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\medvault\\frontend",
-                    "dangerouslySkipPermissions": true,
-                    "additionalDirs": [
-                        "D:\\medvault\\mock-data"
-                    ]
-                },
-                {
-                    "name": "Taylor",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\medvault\\imaging",
-                    "dangerouslySkipPermissions": true,
-                    "additionalDirs": [
-                        "D:\\medvault\\mock-data"
-                    ]
-                },
-                {
-                    "name": "Riley",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\medvault\\backend",
-                    "dangerouslySkipPermissions": true,
-                    "additionalDirs": [
-                        "D:\\medvault\\mock-data"
-                    ]
-                },
-                {
-                    "name": "Morgan",
-                    "role": "AI Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\medvault\\ai",
-                    "dangerouslySkipPermissions": true,
-                    "additionalDirs": [
-                        "D:\\medvault\\mock-data"
-                    ]
-                },
-                {
-                    "name": "Casey",
-                    "role": "QA Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\medvault\\qa",
-                    "dangerouslySkipPermissions": true,
-                    "additionalDirs": [
-                        "D:\\medvault\\frontend",
-                        "D:\\medvault\\backend",
-                        "D:\\medvault\\imaging",
-                        "D:\\medvault\\ai",
-                        "D:\\medvault\\mock-data"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "alpha-research",
-            "hub": {
-                "port": 3004
-            },
-            "agents": [
-                {
-                    "name": "Emma",
-                    "role": "Chief Strategist",
-                    "cli": "codex",
-                    "cwd": "D:\\alpha-research\\strategy",
-                    "systemPrompt": "You are Emma, the Chief Investment Strategist at Alpha Research. You lead the research team and produce final investment reports. Your workflow:\n1. When given a research target (stock, sector, trend), delegate tasks to your teammates:\n   - Ask Sarah (Research Analyst) for news analysis, fundamentals, and industry data\n   - Ask Mike (Sentiment Analyst) for social media sentiment and KOL opinions\n2. Synthesize their findings into a comprehensive investment analysis report\n3. Always include: Executive Summary, Key Findings, Risk Factors, and Recommendation (Buy/Hold/Sell)\n4. Use post_update() to share your final report with the team\n\nIMPORTANT: You must NEVER use implementation tools (Write, Edit, Bash, shell_command). You are a coordinator — use only MCP coordination tools (create_task, assign_task, ask_teammate, post_update, etc). If integration fails, create a task for a worker to fix it."
-                },
-                {
-                    "name": "Sarah",
-                    "role": "Research Analyst",
-                    "cli": "claude",
-                    "cwd": "D:\\alpha-research\\news-research",
-                    "systemPrompt": "You are Sarah, the Research Analyst at Alpha Research. You specialize in fundamental analysis using news data. When given a research task:\n1. Use your News MCP tools to search for recent news, earnings reports, regulatory changes, and industry developments\n2. Analyze the data for investment-relevant insights\n3. Structure your findings with: Key Headlines, Fundamental Analysis, Industry Context, and Notable Risks\n4. Reply to whoever asked you with a clear, data-driven summary\n5. Use post_update() to share important breaking news with the team"
-                },
-                {
-                    "name": "Mike",
-                    "role": "Sentiment Analyst",
-                    "cli": "claude",
-                    "cwd": "D:\\alpha-research\\sentiment-research",
-                    "systemPrompt": "You are Mike, the Sentiment Analyst at Alpha Research. You specialize in social media sentiment analysis. When given a research task:\n1. Use your Twitter/X MCP tools to search for relevant tweets, KOL opinions, and trending discussions\n2. Gauge overall market sentiment (bullish/bearish/neutral) with supporting evidence\n3. Identify key influencers and their positions\n4. Structure your findings with: Sentiment Overview, Key KOL Opinions, Trending Narratives, and Sentiment Score\n5. Reply to whoever asked you with a clear sentiment analysis\n6. Use post_update() to alert the team about sudden sentiment shifts"
-                }
-            ]
-        },
-        {
-            "name": "polymarket-strategy",
-            "hub": {
-                "port": 3001
-            },
-            "agents": [
-                {
-                    "name": "Ian",
-                    "role": "Marketing Strategist",
-                    "cli": "claude",
-                    "cwd": "D:\\pm_strategy",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Rock",
-                    "role": "Full Stack Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\pm_strategy\\Code",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "pm-lp-strategy",
-            "hub": {
-                "port": 3001
-            },
-            "agents": [
-                {
-                    "name": "Frank",
-                    "role": "Full Stack Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\pm_lp_strategy\\code",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Roger",
-                    "role": "Marketing Strategist",
-                    "cli": "claude",
-                    "cwd": "D:\\pm_lp_strategy",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "NewProject",
-            "hub": {
-                "port": 3005
-            },
-            "agents": [
-                {
-                    "name": "Funky",
-                    "role": "Project Manager",
-                    "cli": "claude",
-                    "cwd": "C:\\Users\\User\\Desktop\\NewProj",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "AlexWang",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "C:\\Users\\User\\Desktop\\NewProj\\Frontend",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "AlanChen",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "C:\\Users\\User\\Desktop\\NewProj\\Backend",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "todo-benchmark",
-            "hub": {
-                "port": 3010
-            },
-            "agents": [
-                {
-                    "name": "Emma",
-                    "role": "Project Manager",
-                    "cli": "codex",
-                    "cwd": "D:\\todo-benchmark",
-                    "systemPrompt": "You are Emma, the Project Manager for a Todo App project.\n\nProject scope:\n- REST API: CRUD todos + user auth (JWT)\n- Frontend: React SPA with login, todo list, filters (all/active/completed)\n- Real-time: WebSocket push when any todo changes\n- Design: component spec with exact colors, spacing, typography\n\nYour workflow:\n1. Create a project brief (publish_artifact)\n2. First: create_task for Sam to write the design spec\n3. Then: create_task for Alex to write the API spec and publish_contract for team sign-off\n4. Wait for contract approval before assigning coding tasks\n5. Assign coding tasks with proper depends_on and consumes fields\n6. Track progress via list_tasks, unblock agents, ensure quality\n7. When all tasks are done, publish a final status report\n\nTeam:\n- Sam (Product Designer) — design spec\n- Alex (Backend Engineer) — API spec + backend implementation\n- Jordan (Frontend Engineer) — React UI implementation\n\nYou are a COORDINATOR. Never write code. Only use MCP coordination tools."
-                },
-                {
-                    "name": "Sam",
-                    "role": "Product Designer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark\\design",
+                    "cwd": "/path/to/project/design",
                     "dangerouslySkipPermissions": true
                 },
                 {
                     "name": "Alex",
                     "role": "Backend Engineer",
                     "cli": "claude",
-                    "cwd": "D:\\todo-benchmark\\backend",
+                    "cwd": "/path/to/project/backend",
                     "dangerouslySkipPermissions": true
                 },
                 {
                     "name": "Jordan",
                     "role": "Frontend Engineer",
                     "cli": "claude",
-                    "cwd": "D:\\todo-benchmark\\frontend",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "todo-benchmark-v2",
-            "hub": {
-                "port": 3011
-            },
-            "agents": [
-                {
-                    "name": "Emma",
-                    "role": "Project Manager",
-                    "cli": "codex",
-                    "cwd": "D:\\todo-benchmark-v2",
-                    "systemPrompt": "You are Emma, the Project Manager for a Todo App project.\n\nProject scope:\n- REST API: CRUD todos + user auth (JWT)\n- Frontend: React SPA with login, todo list, filters (all/active/completed)\n- Real-time: WebSocket push when any todo changes\n- Design: component spec with exact colors, spacing, typography\n\nYour workflow:\n1. Create a project brief (publish_artifact)\n2. First: create_task for Sam to write the design spec\n3. Then: create_task for Alex to write the API spec and publish_contract for team sign-off\n4. Wait for contract approval before assigning coding tasks\n5. Assign coding tasks with proper depends_on and consumes fields\n6. Track progress via list_tasks, unblock agents, ensure quality\n7. When all tasks are done, publish a final status report\n\nTeam:\n- Sam (Product Designer) — design spec\n- Alex (Backend Engineer) — API spec + backend implementation\n- Jordan (Frontend Engineer) — React UI implementation\n\nYou are a COORDINATOR. Never write code. Only use MCP coordination tools."
-                },
-                {
-                    "name": "Sam",
-                    "role": "Product Designer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v2\\design",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Alex",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v2\\backend",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Jordan",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v2\\frontend",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "todo-benchmark-v3",
-            "hub": {
-                "port": 3012
-            },
-            "agents": [
-                {
-                    "name": "Emma",
-                    "role": "Project Manager",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v3",
+                    "cwd": "/path/to/project/frontend",
                     "dangerouslySkipPermissions": true,
-                    "systemPrompt": "You are Emma, the Project Manager for a Todo App project.\n\nProject scope:\n- REST API: CRUD todos + user auth (JWT)\n- Frontend: React SPA with login, todo list, filters (all/active/completed)\n- Real-time: WebSocket push when any todo changes\n- Design: component spec with exact colors, spacing, typography\n\nYour workflow:\n1. Create a project brief (publish_artifact)\n2. First: create_task for Sam to write the design spec\n3. Then: create_task for Alex to write the API spec and publish_contract for team sign-off\n4. Wait for contract approval before assigning coding tasks\n5. Assign coding tasks with proper depends_on and consumes fields\n6. Track progress via list_tasks, unblock agents, ensure quality\n7. When all tasks are done, publish a final status report\n\nTeam:\n- Sam (Product Designer) — design spec\n- Alex (Backend Engineer) — API spec + backend implementation\n- Jordan (Frontend Engineer) — React UI implementation\n\nYou are a COORDINATOR. Never write code. Only use MCP coordination tools."
-                },
-                {
-                    "name": "Sam",
-                    "role": "Product Designer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v3\\design",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Alex",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v3\\backend",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Jordan",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v3\\frontend",
-                    "dangerouslySkipPermissions": true
-                }
-            ]
-        },
-        {
-            "name": "todo-benchmark-v4",
-            "hub": {
-                "port": 3013
-            },
-            "agents": [
-                {
-                    "name": "Emma",
-                    "role": "Project Manager",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v4",
-                    "dangerouslySkipPermissions": true,
-                    "systemPrompt": "You are Emma, the Project Manager for a Todo App project.\n\nProject scope:\n- REST API: CRUD todos + user auth (JWT)\n- Frontend: React SPA with login, todo list, filters (all/active/completed)\n- Real-time: WebSocket push when any todo changes\n- Design: component spec with exact colors, spacing, typography\n\nYour workflow:\n1. Create a project brief (publish_artifact)\n2. First: create_task for Sam to write the design spec\n3. Then: create_task for Alex to write the API spec and publish_contract for team sign-off\n4. Wait for contract approval before assigning coding tasks\n5. Assign coding tasks with proper depends_on and consumes fields\n6. Track progress via list_tasks, unblock agents, ensure quality\n7. When all tasks are done, publish a final status report\n\nTeam:\n- Sam (Product Designer) — design spec\n- Alex (Backend Engineer) — API spec + backend implementation\n- Jordan (Frontend Engineer) — React UI implementation\n\nYou are a COORDINATOR. Never write code. Only use MCP coordination tools."
-                },
-                {
-                    "name": "Sam",
-                    "role": "Product Designer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v4\\design",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Alex",
-                    "role": "Backend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v4\\backend",
-                    "dangerouslySkipPermissions": true
-                },
-                {
-                    "name": "Jordan",
-                    "role": "Frontend Engineer",
-                    "cli": "claude",
-                    "cwd": "D:\\todo-benchmark-v4\\frontend",
-                    "dangerouslySkipPermissions": true
+                    "additionalDirs": ["/path/to/project/shared"]
                 }
             ]
         }

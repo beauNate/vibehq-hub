@@ -57,11 +57,11 @@ VibeHQ 是一個**協作協議層**，疊在真正的 CLI agent 之上。每個 
 
 ---
 
-## 自我改善的協調機制：從 D 級到 B 級只用 4 次迭代
+## 自我改善的協調機制：會自動 Debug 自己的框架
 
-VibeHQ 不只是協調 agent — 它**自動分析失敗原因並寫 code 修復自己。**
+VibeHQ 不只是協調 agent — 它**自動分析失敗原因並寫 code 修復自己。** 全自動，零人工介入。
 
-我們建了一個自動化迴圈：跑基準測試 → 分析 log → `/optimize-protocol` 讀取分析結果並實作真正的程式碼修改 → 再跑一次並測量差異：
+我們建了一個封閉迴圈系統：跑基準測試 → 分析 log → `/optimize-protocol` 讀取分析結果並實作真正的程式碼修改 → 重新建置 → 再跑一次並測量差異：
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
@@ -73,47 +73,56 @@ VibeHQ 不只是協調 agent — 它**自動分析失敗原因並寫 code 修復
        └──────────────────────────────────────────────┘
 ```
 
-### 4 次迭代結果（同一個 4 Agent Todo App 基準測試）
+### 基準測試結果：Todo App（V1 → V5，4 個 Agent）
 
-| | v1 | v2 | v3 | v4 |
-|---|---|---|---|---|
-| **等級** | **D** | **C** | **C** | **B** |
-| 耗時 | 47 分鐘 | 13 分鐘 | 10.3 分鐘 | **9.4 分鐘** |
-| 標記（問題） | 13 | 9 | 11 | **7** |
-| 嚴重標記 | 1 | 1 | 2 | **0** |
-| 平行效率 | 0.18 | 0.64 | 0.88 | 0.51 |
+| 指標 | V1 | V2 | V3 | V4 | V5 |
+|------|----|----|----|----|-----|
+| **總 Token** | 7.2M | 3.9M | 14.6M | 15.0M | **5.7M** |
+| **PM Token** | 0.3M | 0.2M | 10.1M | 9.8M | **1.8M** |
+| **PM 佔比** | 4% | 5% | 69% | 65% | **32%** |
+| **回合數** | 233 | 164 | 326 | 308 | 216 |
+| **耗時** | 47min | 13min | 10min | 9min | 14min |
+| **標記（問題）** | 4 | 3 | 5 | 3 | **0** |
+| **Context 膨脹（PM）** | 7.07x | 10.56x | 6.62x | 7.04x | **2.84x** |
 
-**系統在各次迭代中學到並建構的東西：**
+### 基準測試結果：Classroom Quiz（全自動迴圈）
+
+| 指標 | V1（優化前） | V2（迴圈後） | 變化 |
+|------|-------------|-------------|------|
+| **總 Token** | 23.1M | 13.8M | **-40%** |
+| **PM Token** | ~15.2M | ~1.3M | **-91%** |
+| **回合數** | 460 | 353 | -23% |
+| **標記** | 14 | 3 | **-79%** |
+| **STUB_FILE** | 8 | 0 | 消除 |
+| **Context 膨脹（PM）** | 7.87x | 2.84x | -64% |
+
+### 系統學到並建構的東西
 
 | 迭代 | 發現的問題 | 建構的修正 |
 |---|---|---|
-| v1→v2 | Hub 在開機期間誤殺 agent；PM 自己寫 code | 啟動寬限期（180s）；角色 preset 加入工具禁令 |
-| v2→v3 | Codex PM 無視 prompt 約束（shell_command 4→42 次） | `--disallowedTools` CLI 層級強制執行；PM 改用 Claude |
-| v3→v4 | PM 用 Glob 監視 worker；成品被覆寫為 0 byte | 擴充禁用工具清單；MCP 層 0-byte 內容拒絕 |
+| V1→V2 | Hub 在開機期間誤殺 agent；PM 自己寫 code | 啟動寬限期（180s）；角色 preset 加入工具禁令 |
+| V2→V3 | Codex PM 無視 prompt 約束（shell_command 4→42 次） | `--disallowedTools` CLI 層級強制執行；PM 改用 Claude |
+| V3→V4 | PM 用 Glob 監視 worker；成品被覆寫為 0 byte | 擴充禁用工具清單；MCP 層 0-byte 內容拒絕 |
+| V4→V5 | PM 輪詢爆炸（28 次 check_status）；stub 通過驗證 | `McpRateLimiter`（5 次/60s）；`CODE_MIN` 強制執行；完成後靜默 |
+| CQ V1→V2 | 8 個 stub 檔案；PM 66% token 浪費在輪詢 | 同樣的修正自動套用 — stub 消除，token -40% |
+
+```
+       23.1M ┤                         * CQ-V1
+             │
+       15.0M ┤               * V3  * V4
+       13.8M ┤                            * CQ-V2
+             │
+        7.2M ┤  * V1
+        5.7M ┤                                  * V5
+        3.9M ┤      * V2
+             │
+           0 ┼──────────────────────────────────────
+             V1   V2   V3   V4  CQ1  CQ2   V5
+```
 
 **核心洞察：** Prompt 約束只是建議。CLI 層級強制執行才是法律。Agent 會適應並繞過軟性限制 — 修復必須是架構層級的。
 
-### 自己試試看
-
-```bash
-# 1. 跑基準測試
-vibehq start --team your-team
-
-# 2. 分析
-vibehq-analyze --team your-team --with-llm --save --run-id v1
-
-# 3. 自動優化（Claude Code skill）
-/optimize-protocol v1
-
-# 4. 再跑一次，比較
-vibehq start --team your-team
-vibehq-analyze --team your-team --with-llm --save --run-id v2
-vibehq-analyze compare v1 v2
-```
-
-所有優化報告都儲存在 `~/.vibehq/analytics/optimizations/` 以供追蹤與稽核。
-
-📖 **[完整部落格文章：自我改善的多 Agent 協調 →](blog-draft-self-improving-agents.md)**
+📖 **[完整部落格文章：自我改善的多 Agent 協調 →](blog/self-improving-agents.md)**
 
 ---
 
@@ -197,21 +206,95 @@ vibehq-analyze history --last 10             # 查看歷史
 
 **13 條自動偵測規則：** 成品回退、協調者角色偏移、Stub 檔案、任務超時、未完成任務、協調開銷、Agent 無回應、零成品產出、Context 膨脹、重複成品、過早接受任務、過度 MCP 輪詢、任務重新分派。
 
-### `/optimize-protocol` — 自我改善 Skill
+### Skills：`/optimize-protocol` & `/benchmark-loop`
 
-一個 Claude Code skill，讀取分析資料並**寫入真正的程式碼修正**到框架中：
+VibeHQ 內建兩個 skill 來驅動自我改善迴圈。Skills 同時支援 **Claude Code** 和 **Codex CLI** — 相同格式，不同目錄。
+
+#### 跨平台 Skill 位置
+
+| 平台 | 專案層級 | 使用者層級 |
+|------|---------|-----------|
+| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `~/.claude/skills/` |
+| **Codex CLI** | `.agents/skills/<name>/SKILL.md` | `~/.codex/skills/` |
+
+`SKILL.md` 格式已成為跨平台標準 — 相同的 frontmatter（`name`、`description`），相同的 markdown 內容。一個平台建立的 skill 可以直接在另一個平台使用。
+
+#### 設定方式
+
+**Claude Code** — skill 已包含在 `.claude/skills/` 中，直接使用：
+
+```bash
+# 在 Claude Code 中輸入：
+/optimize-protocol v1
+/benchmark-loop
+```
+
+**Codex CLI** — 將 skill 複製到 Codex 的目錄：
+
+```bash
+# 專案層級（提交到 repo）
+mkdir -p .agents/skills
+cp -r .claude/skills/optimize-protocol .agents/skills/
+cp -r .claude/skills/benchmark-loop .agents/skills/
+
+# 或使用者層級（所有專案都可用）
+cp -r .claude/skills/optimize-protocol ~/.codex/skills/
+cp -r .claude/skills/benchmark-loop ~/.codex/skills/
+```
+
+然後在 Codex CLI 中，用 `/skills` 或輸入 `$` 來使用 skill。
+
+#### `/optimize-protocol` — 框架工程師
+
+讀取分析資料並**寫入真正的程式碼修正**（不是參數調整）：
 
 ```bash
 /optimize-protocol v1    # 讀取 v1 的分析資料，實作修正
 ```
 
-功能：
 1. 載入當前 run + 所有先前的優化報告
 2. 建構跨 run 趨勢表（哪些在改善、哪些回退、哪些是副作用）
 3. 將每個問題分類為 NEW、RECURRING 或 SIDE-EFFECT
-4. 實作真正的 TypeScript 修改（不是參數調整）
+4. 實作真正的 TypeScript 修改到框架中
 5. 驗證建置通過
 6. 儲存詳細變更日誌至 `~/.vibehq/analytics/optimizations/`
+
+#### `/benchmark-loop` — 自主執行器
+
+全自動執行完整的自我改善循環：
+
+```bash
+/benchmark-loop "用 REST API、React 前端和 WebSocket 即時更新建一個 Todo App"
+```
+
+1. 啟動一個全新團隊並執行標準化專案
+2. 等待團隊完成（心跳監控）
+3. 分析 session log（13 條規則 + LLM 評分）
+4. 觸發 `/optimize-protocol` 寫入程式碼修正
+5. 重建框架（`npx tsup`）
+6. 以新團隊重複執行 — 零人工介入
+
+#### 手動逐步執行（任何 CLI 都可以）
+
+底層工具是普通的 CLI 指令 — **不需要 skill**：
+
+```bash
+# 1. 跑基準測試
+vibehq start --team your-team
+
+# 2. 分析
+vibehq-analyze --team your-team --with-llm --save --run-id v1
+
+# 3. 自動優化（Claude Code / Codex skill）
+/optimize-protocol v1
+
+# 4. 再跑一次，比較
+vibehq start --team your-team
+vibehq-analyze --team your-team --with-llm --save --run-id v2
+vibehq-analyze compare v1 v2
+```
+
+所有優化報告都儲存在 `~/.vibehq/analytics/optimizations/` 以供追蹤與稽核。
 
 支援 Claude Code 和 Codex CLI 原生 JSONL 格式。
 

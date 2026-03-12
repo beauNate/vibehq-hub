@@ -5,6 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { HubClient } from './hub-client.js';
+import { McpRateLimiter } from './rate-limiter.js';
 import { registerListTeammates } from './tools/list-teammates.js';
 import { registerAskTeammate } from './tools/ask-teammate.js';
 import { registerAssignTask } from './tools/assign-task.js';
@@ -39,29 +40,32 @@ export async function startAgent(options: AgentOptions): Promise<void> {
     // Create Hub client
     const hub = new HubClient(hubUrl, name, role, team, askTimeout, cli, cwd);
 
-    // Register all MCP tools
+    // Rate limiter for polling tools — 5 calls per 60s window, 15s cache TTL
+    const rateLimiter = new McpRateLimiter(5, 60_000, 15_000);
+
+    // Register all MCP tools (pass rateLimiter to polling-heavy tools)
     registerListTeammates(server, hub);
     registerAskTeammate(server, hub);
     registerAssignTask(server, hub);
-    registerCheckStatus(server, hub);
+    registerCheckStatus(server, hub, rateLimiter);
     registerReplyToTeam(server, hub);
     registerShareFile(server, team, hub);
     registerReadSharedFile(server, team);
-    registerListSharedFiles(server, team);
+    registerListSharedFiles(server, team, rateLimiter);
     registerPostUpdate(server, hub);
-    registerGetTeamUpdates(server, hub);
+    registerGetTeamUpdates(server, hub, rateLimiter);
 
     // V2: Task lifecycle
     registerCreateTask(server, hub);
     registerAcceptTask(server, hub);
     registerUpdateTask(server, hub);
     registerCompleteTask(server, hub);
-    registerListTasks(server, hub);
+    registerListTasks(server, hub, rateLimiter);
     registerReassignTask(server, hub);
 
     // V2: Artifact system
     registerPublishArtifact(server, hub, team);
-    registerListArtifacts(server, hub);
+    registerListArtifacts(server, hub, rateLimiter);
 
     // V2: Contract sign-off
     registerPublishContract(server, hub);

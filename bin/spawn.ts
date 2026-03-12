@@ -20,6 +20,7 @@ Options:
   -t, --timeout <ms>           Response timeout in ms (default: 120000)
       --system-prompt <text>   System prompt text
       --system-prompt-file <f> Read system prompt from a file
+      --auto-kickstart         Auto-inject initial prompt (benchmark/loop mode only)
       --cwd <path>             Working directory for the CLI (default: current dir)
   -h, --help                   Show help
 
@@ -30,7 +31,7 @@ Examples:
 `);
 }
 
-function parseArgs(): { name: string; role: string; hub: string; team: string; timeout: number; systemPrompt: string; skipPermissions: boolean; additionalDirs: string[]; cwd: string; command: string; commandArgs: string[] } {
+function parseArgs(): { name: string; role: string; hub: string; team: string; timeout: number; systemPrompt: string; skipPermissions: boolean; autoKickstart: boolean; additionalDirs: string[]; cwd: string; command: string; commandArgs: string[] } {
     const args = process.argv.slice(2);
     let name = '';
     let role = 'Engineer';
@@ -39,6 +40,7 @@ function parseArgs(): { name: string; role: string; hub: string; team: string; t
     let timeout = 120000;
     let systemPrompt = '';
     let skipPermissions = false;
+    let autoKickstart = false;
     let additionalDirs: string[] = [];
     let cwd = '';
     let command = '';
@@ -93,6 +95,9 @@ function parseArgs(): { name: string; role: string; hub: string; team: string; t
             case '--skip-permissions':
                 skipPermissions = true;
                 break;
+            case '--auto-kickstart':
+                autoKickstart = true;
+                break;
             case '--add-dir':
                 additionalDirs.push(ourArgs[++i]);
                 break;
@@ -119,10 +124,10 @@ function parseArgs(): { name: string; role: string; hub: string; team: string; t
         process.exit(1);
     }
 
-    return { name, role, hub, team, timeout, systemPrompt, skipPermissions, additionalDirs, cwd, command, commandArgs };
+    return { name, role, hub, team, timeout, systemPrompt, skipPermissions, autoKickstart, additionalDirs, cwd, command, commandArgs };
 }
 
-const { name, role, hub, team, timeout, systemPrompt, skipPermissions, additionalDirs, cwd, command, commandArgs } = parseArgs();
+const { name, role, hub, team, timeout, systemPrompt, skipPermissions, autoKickstart, additionalDirs, cwd, command, commandArgs } = parseArgs();
 
 console.error(`[vibehq-spawn] name=${name}, skipPermissions=${skipPermissions}, command=${command}`);
 console.error(`[vibehq-spawn] raw args: ${process.argv.slice(2).join(' ')}`);
@@ -136,6 +141,7 @@ const spawner = new AgentSpawner({
     args: commandArgs,
     systemPrompt,
     dangerouslySkipPermissions: skipPermissions,
+    autoKickstart,
     additionalDirs,
     cwd: cwd || undefined,
 });

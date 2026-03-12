@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { HubClient } from '../hub-client.js';
+import type { McpRateLimiter } from '../rate-limiter.js';
 import type { TeamUpdate } from '../../shared/types.js';
 
 export function registerPostUpdate(server: McpServer, hubClient: HubClient): void {
@@ -33,20 +34,36 @@ export function registerPostUpdate(server: McpServer, hubClient: HubClient): voi
     );
 }
 
-export function registerGetTeamUpdates(server: McpServer, hubClient: HubClient): void {
+export function registerGetTeamUpdates(server: McpServer, hubClient: HubClient, rateLimiter?: McpRateLimiter): void {
     server.tool(
         'get_team_updates',
-        'Get recent progress updates from all teammates. Use this to check what the team has been working on.',
+        'Get recent progress updates from all teammates. Hub sends proactive update notifications — avoid calling this repeatedly.',
         {
             limit: z.number().optional().describe('Max number of updates to return (default: 20)'),
         },
         async ({ limit }) => {
+            // Rate limit check
+            if (rateLimiter) {
+                const check = rateLimiter.check('get_team_updates');
+                if (check.limited && check.cachedResponse) {
+                    const { McpRateLimiter: RL } = await import('../rate-limiter.js');
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: RL.buildWarning('get_team_updates', check.callCount) + '\n' + check.cachedResponse,
+                        }],
+                    };
+                }
+            }
+
             try {
                 const updates = await hubClient.getUpdates(limit ?? 20);
+                const responseText = JSON.stringify({ updates }, null, 2);
+                rateLimiter?.recordResponse('get_team_updates', responseText);
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: JSON.stringify({ updates }, null, 2),
+                        text: responseText,
                     }],
                 };
             } catch (err) {

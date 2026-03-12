@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { HubClient } from '../hub-client.js';
+import type { McpRateLimiter } from '../rate-limiter.js';
 
 export function registerCreateTask(server: McpServer, hub: HubClient): void {
     server.tool(
@@ -197,20 +198,37 @@ export function registerReassignTask(server: McpServer, hub: HubClient): void {
     );
 }
 
-export function registerListTasks(server: McpServer, hub: HubClient): void {
+export function registerListTasks(server: McpServer, hub: HubClient, rateLimiter?: McpRateLimiter): void {
     server.tool(
         'list_tasks',
-        'List all tasks in the team. Filter by "all", "mine" (tasks assigned to you), or "active" (non-done tasks).',
+        'List all tasks in the team. Filter by "all", "mine" (tasks assigned to you), or "active" (non-done tasks). Hub sends proactive task notifications — avoid calling this repeatedly.',
         {
             filter: z.enum(['all', 'mine', 'active']).default('active').describe('Filter: all, mine, or active'),
         },
         async (args) => {
+            // Rate limit check
+            if (rateLimiter) {
+                const cacheKey = `list_tasks:${args.filter}`;
+                const check = rateLimiter.check(cacheKey);
+                if (check.limited && check.cachedResponse) {
+                    const { McpRateLimiter: RL } = await import('../rate-limiter.js');
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: RL.buildWarning('list_tasks', check.callCount) + '\n' + check.cachedResponse,
+                        }],
+                    };
+                }
+            }
+
             try {
                 const tasks = await hub.listTasks(args.filter);
+                const responseText = JSON.stringify({ filter: args.filter, tasks }, null, 2);
+                rateLimiter?.recordResponse(`list_tasks:${args.filter}`, responseText);
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: JSON.stringify({ filter: args.filter, tasks }, null, 2),
+                        text: responseText,
                     }],
                 };
             } catch (err) {
