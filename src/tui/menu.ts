@@ -43,9 +43,10 @@ export async function selectMenu(items: MenuItem[], title?: string): Promise<str
 
         const render = () => {
             // Move cursor up to overwrite previous render
-            const totalLines = items.length + 4; // box top + padding + items + padding + box bottom
-            process.stdout.write(`\x1b[${totalLines}A`);
-            process.stdout.write(renderMenu(items, selectedIndex, title));
+            const output = renderMenu(items, selectedIndex, title);
+            const lineCount = (output.match(/\n/g) || []).length;
+            process.stdout.write(`\x1b[${lineCount}A`);
+            process.stdout.write(output);
         };
 
         // Initial render

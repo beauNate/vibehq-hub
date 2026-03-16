@@ -1,7 +1,7 @@
 ---
 name: benchmark-loop
 description: Fully automated self-improving loop — takes a project prompt, designs a team, runs the benchmark, analyzes results, optimizes framework code, rebuilds, and repeats until target grade is reached.
-argument-hint: "<project description>" [--target <grade>] [--port <number>] [--max-iterations <number>]
+argument-hint: '"<project description>" [--target <grade>] [--port <number>] [--max-iterations <number>]'
 ---
 
 # /benchmark-loop

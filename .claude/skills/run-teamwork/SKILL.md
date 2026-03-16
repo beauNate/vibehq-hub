@@ -1,7 +1,7 @@
 ---
 name: run-teamwork
 description: Run a single team session to build a project from a prompt. Designs the team, spawns agents, waits for completion, and delivers. No analysis or optimization loop.
-argument-hint: "<project description>" [--port <number>]
+argument-hint: '"<project description>" [--port <number>]'
 ---
 
 # /run-teamwork

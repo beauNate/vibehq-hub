@@ -1,7 +1,7 @@
 ---
 name: optimize-protocol
 description: Autonomous framework engineer — reads VibeHQ post-run analysis, understands root causes of multi-agent coordination failures, then designs and implements real code changes (new features, refactors, architectural improvements) to fix them. Not parameter tuning — actual engineering.
-argument-hint: [run-id (optional, defaults to latest)]
+argument-hint: "[run-id (optional, defaults to latest)]"
 ---
 
 # /optimize-protocol
